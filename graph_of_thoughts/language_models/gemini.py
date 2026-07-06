@@ -192,13 +192,19 @@ class Gemini(AbstractLanguageModel):
         for response in query_response:
             usage = getattr(response, "usage_metadata", None)
             response_metadata: Dict[str, Any] = {
+                # provider/model: 标记响应来自原生 Gemini SDK 以及实际模型 id。
                 "provider": "gemini",
                 "model": self.model_id,
+                # 原生 Gemini SDK 当前未稳定暴露 token logprobs，因此不能直接计算熵。
                 "has_logprobs": False,
+                # latency_seconds: 本次 Gemini API 调用耗时，单位秒。
                 "latency_seconds": getattr(response, "_got_latency_seconds", None),
                 "usage": {
+                    # prompt_tokens: 输入 prompt 消耗的 token 数。
                     "prompt_tokens": getattr(usage, "prompt_token_count", None),
+                    # completion_tokens: 模型输出消耗的 token 数。
                     "completion_tokens": getattr(usage, "candidates_token_count", None),
+                    # total_tokens: prompt + completion 的总 token 数。
                     "total_tokens": getattr(usage, "total_token_count", None),
                 },
             }

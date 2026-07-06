@@ -34,11 +34,17 @@ def _operation_response_metadata(
     for index, item in enumerate(metadata):
         item.update(
             {
+                # operation_id: 当前 GoT operation 的唯一编号，可用于定位图中节点。
                 "operation_id": operation.id,
+                # operation_type: 当前节点类型，例如 generate / aggregate / score。
                 "operation_type": operation.operation_type.name,
+                # prompt_role: 这次 LLM 调用在流程里的用途，例如 generate/aggregate。
                 "prompt_role": prompt_role,
+                # prompt: 发送给模型的完整提示词，便于复现实验和排查失败案例。
                 "prompt": prompt,
+                # response_text: 模型原始文本回复；parser 会从这里解析出 thought.state。
                 "response_text": responses[index] if index < len(responses) else None,
+                # predecessor_operation_ids: 当前 operation 依赖的上游 operation id。
                 "predecessor_operation_ids": [
                     predecessor.id for predecessor in operation.predecessors
                 ],
@@ -56,6 +62,8 @@ def _metadata_for_created_thought(
     several thoughts; in that case each thought inherits the single response's
     metadata.
     """
+    # 一个 response 可能被 parser 拆成多个 Thought，例如一次 split prompt 返回多个子列表。
+    # 如果只有一条 response metadata，就让拆出来的多个 Thought 共享这份观测信息。
     if not response_metadata:
         return {}
     if len(response_metadata) == 1:
@@ -165,6 +173,52 @@ class Operation(ABC):
         )
         self._execute(lm, prompter, parser, **kwargs)
         self.logger.debug("Operation %d executed", self.id)
+        self.executed = True
+
+    def skip(self, skip_marker: str = "[SKIP]", **kwargs) -> None:
+        """
+        Skip this operation without calling the language model, while preserving
+        the operation node and producing placeholder Thought objects for
+        downstream operations.
+
+        This is used by static compression experiments: the graph topology is
+        unchanged, but selected LLM-generation nodes are replaced by [SKIP].
+        """
+        assert self.can_be_executed(), "Not all predecessors have been executed"
+        previous_thoughts: List[Thought] = self.get_previous_thoughts()
+        if len(previous_thoughts) == 0:
+            previous_thoughts = [Thought(state=kwargs)]
+
+        skipped_thoughts: List[Thought] = []
+        num_placeholders = max(1, getattr(self, "num_branches_response", 1))
+        for thought in previous_thoughts:
+            for _ in range(num_placeholders):
+                skipped_state = dict(thought.state or {})
+                skipped_state["current"] = skip_marker
+                skipped_state["skipped"] = True
+                skipped_state["skip_source_operation_id"] = self.id
+                skipped_thoughts.append(
+                    Thought(
+                        skipped_state,
+                        metadata={
+                            "skipped": True,
+                            "skip_marker": skip_marker,
+                            "operation_id": self.id,
+                            "operation_type": self.operation_type.name,
+                            "predecessor_operation_ids": [
+                                predecessor.id for predecessor in self.predecessors
+                            ],
+                        },
+                    )
+                )
+
+        self.thoughts.extend(skipped_thoughts)
+        self.logger.info(
+            "Operation %d of type %s skipped and created %d placeholder thoughts",
+            self.id,
+            self.operation_type,
+            len(skipped_thoughts),
+        )
         self.executed = True
 
     @abstractmethod
@@ -707,6 +761,48 @@ class Aggregate(Operation):
                     metadata=_metadata_for_created_thought(response_metadata, index),
                 )
             )
+
+    def skip(self, skip_marker: str = "[SKIP]", **kwargs) -> None:
+        """
+        Skip aggregation without calling the language model. The placeholder
+        keeps the merged upstream state so downstream operations still see a
+        structurally valid graph node.
+        """
+        assert self.can_be_executed(), "Not all predecessors have been executed"
+        previous_thoughts: List[Thought] = self.get_previous_thoughts()
+        if len(previous_thoughts) == 0:
+            self.executed = True
+            return
+
+        base_state: Dict = {}
+        for thought in sorted(previous_thoughts, key=lambda thought: thought.score):
+            base_state = {**base_state, **thought.state}
+        base_state["current"] = skip_marker
+        base_state["skipped"] = True
+        base_state["skip_source_operation_id"] = self.id
+
+        for _ in range(max(1, self.num_responses)):
+            self.thoughts.append(
+                Thought(
+                    dict(base_state),
+                    metadata={
+                        "skipped": True,
+                        "skip_marker": skip_marker,
+                        "operation_id": self.id,
+                        "operation_type": self.operation_type.name,
+                        "predecessor_operation_ids": [
+                            predecessor.id for predecessor in self.predecessors
+                        ],
+                    },
+                )
+            )
+
+        self.logger.info(
+            "Aggregate operation %d skipped and created %d placeholder thoughts",
+            self.id,
+            len(self.thoughts),
+        )
+        self.executed = True
 
 
 class KeepBestN(Operation):

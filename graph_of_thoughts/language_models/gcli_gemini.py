@@ -54,7 +54,9 @@ class GCLIGemini(AbstractLanguageModel):
         self.temperature: float = self.config["temperature"]
         self.max_tokens: int = self.config["max_tokens"]
         self.stop: Union[str, List[str]] = self.config["stop"]
+        # collect_logprobs: 是否请求 token 级 logprob；代理支持时可用于计算节点熵。
         self.collect_logprobs: bool = bool(self.config.get("collect_logprobs", False))
+        # top_logprobs: 每个生成位置返回概率最高的 k 个候选 token，用于近似熵。
         self.top_logprobs: int = int(self.config.get("top_logprobs", 5))
 
         # GCLI 代理相关配置
@@ -146,7 +148,9 @@ class GCLIGemini(AbstractLanguageModel):
             "stop": self.stop,
         }
         if self.collect_logprobs:
+            # logprobs=True 返回实际生成 token 的 log 概率。
             create_kwargs["logprobs"] = True
+            # top_logprobs=k 返回 top-k 候选 token 的 log 概率，用于近似 token entropy。
             create_kwargs["top_logprobs"] = self.top_logprobs
 
         start_time = self._now()

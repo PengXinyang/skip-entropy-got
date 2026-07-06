@@ -22,6 +22,7 @@ pip-log.txt
 
 # Data
 results/
+examples/static_skip_results/
 *.out
 *.err
 

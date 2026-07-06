@@ -50,7 +50,11 @@ class ChatGPT(AbstractLanguageModel):
         self.max_tokens: int = self.config["max_tokens"]
         # The stop sequence is a sequence of tokens that the model will stop generating at (it will not generate the stop sequence).
         self.stop: Union[str, List[str]] = self.config["stop"]
+        # collect_logprobs: 是否向 API 请求 token 级 logprob 信息。
+        # 只有开启后，后续 thought_metadata 才可能包含 entropy/logprob 字段。
         self.collect_logprobs: bool = bool(self.config.get("collect_logprobs", False))
+        # top_logprobs: 每个生成位置返回概率最高的几个候选 token。
+        # 例如 5 表示返回 top-5 候选，用这些候选概率近似计算 token entropy。
         self.top_logprobs: int = int(self.config.get("top_logprobs", 5))
         # The account organization is the organization that is used for chatgpt.
         self.organization: str = self.config["organization"]
@@ -125,7 +129,10 @@ class ChatGPT(AbstractLanguageModel):
             "stop": self.stop,
         }
         if self.collect_logprobs:
+            # logprobs=True: 请求实际生成 token 的 log 概率。
             create_kwargs["logprobs"] = True
+            # top_logprobs=k: 请求每个位置 top-k 候选 token 的 log 概率。
+            # 完整熵需要全词表概率，但 API 通常只返回 top-k，因此这里得到的是近似熵。
             create_kwargs["top_logprobs"] = self.top_logprobs
 
         start_time = self._now()

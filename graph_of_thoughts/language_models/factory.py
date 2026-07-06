@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-from graph_of_thoughts.language_models import ChatGPT, DeepSeek, Gemini
-
 
 def build_language_model(
         config_path: str,
@@ -51,16 +49,12 @@ def build_language_model(
     
     if lower.startswith("gemini-"):
         if gemini_parallel_group_0based is not None:
-            from graph_of_thoughts.language_models.gemini_grouped_failover import (
-                GeminiGroupedFailover,
+            raise ImportError(
+                "gemini_parallel_group_0based was requested, but "
+                "gemini_grouped_failover.py is not present in this repository."
             )
+        from graph_of_thoughts.language_models.gemini import Gemini
 
-            return GeminiGroupedFailover(
-                config_path,
-                logical_model_name=normalized,
-                preferred_group_0based=int(gemini_parallel_group_0based),
-                cache=cache,
-            )
         return Gemini(
             config_path,
             model_name=normalized,
@@ -68,11 +62,15 @@ def build_language_model(
         )
     
     if lower.startswith("deepseek-"):
+        from graph_of_thoughts.language_models.deepseek import DeepSeek
+
         return DeepSeek(
             config_path,
             model_name=normalized,
             cache=cache,
         )
+
+    from graph_of_thoughts.language_models.chatgpt import ChatGPT
 
     return ChatGPT(
         config_path,

@@ -32,7 +32,9 @@ class Thought:
         """
         self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
         self.id: int = next(Thought._ids)
+        # state: 业务状态，例如 current/result/phase 等，由各任务 parser 解析得到。
         self.state: Dict = state
+        # metadata: 观测信息，例如生成该 Thought 的模型、prompt、response、熵、token 用量、延迟等。
         self.metadata: Dict[str, Any] = metadata or {}
         self._score: float = 0.0
         self._valid: bool = False
@@ -50,6 +52,7 @@ class Thought:
         :return: A new Thought instance with properties copied from the input thought.
         """
         new_thought = Thought(thought.state)
+        # 复制 Thought 时保留观测信息，便于 Score/KeepBestN/GroundTruth 后仍能追溯来源。
         new_thought.metadata = dict(thought.metadata)
         new_thought.score = thought.score
         new_thought.valid = thought.valid
