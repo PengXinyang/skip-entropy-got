@@ -116,4 +116,20 @@ class Llama2HF(AbstractLanguageModel):
         :return: List of response strings.
         :rtype: List[str]
         """
-        return [query_response["generated_text"] for query_response in query_responses]
+        texts = [query_response["generated_text"] for query_response in query_responses]
+        self._set_last_response_metadata(
+            [
+                {
+                    "provider": "huggingface",
+                    "model": self.model_id,
+                    "has_logprobs": False,
+                    "usage": {
+                        "prompt_tokens": None,
+                        "completion_tokens": None,
+                        "total_tokens": None,
+                    },
+                }
+                for _ in texts
+            ]
+        )
+        return texts

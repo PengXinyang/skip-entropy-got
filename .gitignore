@@ -30,3 +30,5 @@ env/
 
 # Config File
 **/config.json
+.agents
+.deps

@@ -107,36 +107,42 @@ class Controller:
         """
         output = []
         for operation in self.graph.operations:
+            thoughts = operation.get_thoughts()
+            thought_metadata = [thought.metadata for thought in thoughts]
             operation_serialized = {
+                "operation_id": operation.id,
                 "operation": operation.operation_type.name,
-                "thoughts": [thought.state for thought in operation.get_thoughts()],
+                "predecessors": [
+                    predecessor.id for predecessor in operation.predecessors
+                ],
+                "successors": [successor.id for successor in operation.successors],
+                "thoughts": [thought.state for thought in thoughts],
+                "thought_metadata": thought_metadata,
             }
-            if any([thought.scored for thought in operation.get_thoughts()]):
+            if any([thought.scored for thought in thoughts]):
                 operation_serialized["scored"] = [
-                    thought.scored for thought in operation.get_thoughts()
+                    thought.scored for thought in thoughts
                 ]
-                operation_serialized["scores"] = [
-                    thought.score for thought in operation.get_thoughts()
-                ]
-            if any([thought.validated for thought in operation.get_thoughts()]):
+                operation_serialized["scores"] = [thought.score for thought in thoughts]
+            if any([thought.validated for thought in thoughts]):
                 operation_serialized["validated"] = [
-                    thought.validated for thought in operation.get_thoughts()
+                    thought.validated for thought in thoughts
                 ]
                 operation_serialized["validity"] = [
-                    thought.valid for thought in operation.get_thoughts()
+                    thought.valid for thought in thoughts
                 ]
             if any(
                 [
                     thought.compared_to_ground_truth
-                    for thought in operation.get_thoughts()
+                    for thought in thoughts
                 ]
             ):
                 operation_serialized["compared_to_ground_truth"] = [
                     thought.compared_to_ground_truth
-                    for thought in operation.get_thoughts()
+                    for thought in thoughts
                 ]
                 operation_serialized["problem_solved"] = [
-                    thought.solved for thought in operation.get_thoughts()
+                    thought.solved for thought in thoughts
                 ]
             output.append(operation_serialized)
 

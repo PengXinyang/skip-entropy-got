@@ -50,6 +50,8 @@ class ChatGPT(AbstractLanguageModel):
         self.max_tokens: int = self.config["max_tokens"]
         # The stop sequence is a sequence of tokens that the model will stop generating at (it will not generate the stop sequence).
         self.stop: Union[str, List[str]] = self.config["stop"]
+        self.collect_logprobs: bool = bool(self.config.get("collect_logprobs", False))
+        self.top_logprobs: int = int(self.config.get("top_logprobs", 5))
         # The account organization is the organization that is used for chatgpt.
         self.organization: str = self.config["organization"]
         if self.organization == "":
@@ -114,23 +116,36 @@ class ChatGPT(AbstractLanguageModel):
         :return: The OpenAI model's response.
         :rtype: ChatCompletion
         """
-        response = self.client.chat.completions.create(
-            model=self.model_id,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            n=num_responses,
-            stop=self.stop,
-        )
+        create_kwargs = {
+            "model": self.model_id,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "n": num_responses,
+            "stop": self.stop,
+        }
+        if self.collect_logprobs:
+            create_kwargs["logprobs"] = True
+            create_kwargs["top_logprobs"] = self.top_logprobs
+
+        start_time = self._now()
+        try:
+            response = self.client.chat.completions.create(**create_kwargs)
+        except OpenAIError:
+            if not self.collect_logprobs:
+                raise
+            self.logger.warning(
+                "Model/provider rejected logprobs request; retrying without logprobs"
+            )
+            create_kwargs.pop("logprobs", None)
+            create_kwargs.pop("top_logprobs", None)
+            response = self.client.chat.completions.create(**create_kwargs)
+        latency = self._now() - start_time
 
         self.prompt_tokens += response.usage.prompt_tokens
         self.completion_tokens += response.usage.completion_tokens
-        prompt_tokens_k = float(self.prompt_tokens) / 1000.0
-        completion_tokens_k = float(self.completion_tokens) / 1000.0
-        self.cost = (
-            self.prompt_token_cost * prompt_tokens_k
-            + self.response_token_cost * completion_tokens_k
-        )
+        self._calculate_cost()
+        setattr(response, "_got_latency_seconds", latency)
         self.logger.info(
             f"This is the response from chatgpt: {response}"
             f"\nThis is the cost of the response: {self.cost}"
@@ -148,8 +163,12 @@ class ChatGPT(AbstractLanguageModel):
         :return: List of response strings.
         :rtype: List[str]
         """
-        if not isinstance(query_response, List):
+        if not isinstance(query_response, list):
             query_response = [query_response]
+        metadata = self._openai_chat_metadata(query_response, "openai")
+        for item, response in zip(metadata, query_response):
+            item["latency_seconds"] = getattr(response, "_got_latency_seconds", None)
+        self._set_last_response_metadata(metadata)
         return [
             choice.message.content
             for response in query_response

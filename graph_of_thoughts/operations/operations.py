@@ -9,7 +9,7 @@
 from __future__ import annotations
 import logging
 from enum import Enum
-from typing import List, Iterator, Dict, Callable, Union
+from typing import List, Iterator, Dict, Callable, Union, Any
 from abc import ABC, abstractmethod
 import itertools
 
@@ -17,6 +17,52 @@ from graph_of_thoughts.operations.thought import Thought
 from graph_of_thoughts.language_models import AbstractLanguageModel
 from graph_of_thoughts.prompter import Prompter
 from graph_of_thoughts.parser import Parser
+
+
+def _operation_response_metadata(
+    lm: AbstractLanguageModel,
+    responses: List[str],
+    prompt: str,
+    operation: "Operation",
+    prompt_role: str,
+) -> List[Dict[str, Any]]:
+    """
+    Consume model metadata for the most recent response texts and add operation
+    context. The returned list is aligned with responses when possible.
+    """
+    metadata = lm.consume_last_response_metadata(len(responses))
+    for index, item in enumerate(metadata):
+        item.update(
+            {
+                "operation_id": operation.id,
+                "operation_type": operation.operation_type.name,
+                "prompt_role": prompt_role,
+                "prompt": prompt,
+                "response_text": responses[index] if index < len(responses) else None,
+                "predecessor_operation_ids": [
+                    predecessor.id for predecessor in operation.predecessors
+                ],
+            }
+        )
+    return metadata
+
+
+def _metadata_for_created_thought(
+    response_metadata: List[Dict[str, Any]],
+    index: int,
+) -> Dict[str, Any]:
+    """
+    Choose metadata for a parsed thought. Some parsers split one response into
+    several thoughts; in that case each thought inherits the single response's
+    metadata.
+    """
+    if not response_metadata:
+        return {}
+    if len(response_metadata) == 1:
+        return dict(response_metadata[0])
+    if index < len(response_metadata):
+        return dict(response_metadata[index])
+    return dict(response_metadata[-1])
 
 
 class OperationType(Enum):
@@ -231,11 +277,18 @@ class Score(Operation):
                 responses = lm.get_response_texts(
                     lm.query(prompt, num_responses=self.num_samples)
                 )
+                score_metadata = _operation_response_metadata(
+                    lm, responses, prompt, self, "score"
+                )
                 self.logger.debug("Responses from LM: %s", responses)
                 scores = parser.parse_score_answer(previous_thoughts_states, responses)
             for thought, score in zip(previous_thoughts, scores):
                 new_thought = Thought.from_thought(thought)
                 new_thought.score = score
+                if self.scoring_function is None:
+                    new_thought.metadata["score_observation"] = _metadata_for_created_thought(
+                        score_metadata, len(self.thoughts)
+                    )
                 self.thoughts.append(new_thought)
         else:
             for thought in previous_thoughts:
@@ -253,10 +306,17 @@ class Score(Operation):
                     responses = lm.get_response_texts(
                         lm.query(prompt, num_responses=self.num_samples)
                     )
+                    score_metadata = _operation_response_metadata(
+                        lm, responses, prompt, self, "score"
+                    )
                     self.logger.debug("Responses from LM: %s", responses)
                     score = parser.parse_score_answer([thought.state], responses)[0]
 
                 new_thought.score = score
+                if self.scoring_function is None:
+                    new_thought.metadata["score_observation"] = _metadata_for_created_thought(
+                        score_metadata, 0
+                    )
                 self.thoughts.append(new_thought)
 
         self.logger.info(
@@ -348,10 +408,16 @@ class ValidateAndImprove(Operation):
                     responses = lm.get_response_texts(
                         lm.query(prompt, num_responses=self.num_samples)
                     )
+                    validation_metadata = _operation_response_metadata(
+                        lm, responses, prompt, self, "validation"
+                    )
                     self.logger.debug("Responses from LM: %s", responses)
 
                     valid = parser.parse_validation_answer(
                         current_thought.state, responses
+                    )
+                    current_thought.metadata["validation_observation"] = (
+                        _metadata_for_created_thought(validation_metadata, 0)
                     )
                 current_thought.valid = valid
                 thought_list.append(current_thought)
@@ -366,11 +432,17 @@ class ValidateAndImprove(Operation):
                 responses = lm.get_response_texts(
                     lm.query(improve_prompt, num_responses=1)
                 )
+                improve_metadata = _operation_response_metadata(
+                    lm, responses, improve_prompt, self, "improve"
+                )
                 self.logger.debug("Responses from LM: %s", responses)
                 state_update = parser.parse_improve_answer(
                     current_thought.state, responses
                 )
-                current_thought = Thought({**current_thought.state, **state_update})
+                current_thought = Thought(
+                    {**current_thought.state, **state_update},
+                    metadata=_metadata_for_created_thought(improve_metadata, 0),
+                )
                 current_try += 1
             self.thoughts.append(thought_list)
 
@@ -452,10 +524,22 @@ class Generate(Operation):
             responses = lm.get_response_texts(
                 lm.query(prompt, num_responses=self.num_branches_response)
             )
+            response_metadata = _operation_response_metadata(
+                lm, responses, prompt, self, "generate"
+            )
             self.logger.debug("Responses from LM: %s", responses)
-            for new_state in parser.parse_generate_answer(base_state, responses):
+            for index, new_state in enumerate(
+                parser.parse_generate_answer(base_state, responses)
+            ):
                 new_state = {**base_state, **new_state}
-                self.thoughts.append(Thought(new_state))
+                self.thoughts.append(
+                    Thought(
+                        new_state,
+                        metadata=_metadata_for_created_thought(
+                            response_metadata, index
+                        ),
+                    )
+                )
                 self.logger.debug(
                     "New thought %d created with state %s",
                     self.thoughts[-1].id,
@@ -524,9 +608,17 @@ class Improve(Operation):
             improve_prompt = prompter.improve_prompt(**thought.state)
             self.logger.debug("Prompt for LM: %s", improve_prompt)
             responses = lm.get_response_texts(lm.query(improve_prompt, num_responses=1))
+            improve_metadata = _operation_response_metadata(
+                lm, responses, improve_prompt, self, "improve"
+            )
             self.logger.debug("Responses from LM: %s", responses)
             state_update = parser.parse_improve_answer(thought.state, responses)
-            self.thoughts.append(Thought({**thought.state, **state_update}))
+            self.thoughts.append(
+                Thought(
+                    {**thought.state, **state_update},
+                    metadata=_metadata_for_created_thought(improve_metadata, 0),
+                )
+            )
 
         self.logger.info(
             "Improve operation %d improved %d thoughts", self.id, len(self.thoughts)
@@ -598,6 +690,9 @@ class Aggregate(Operation):
         responses = lm.get_response_texts(
             lm.query(prompt, num_responses=self.num_responses)
         )
+        response_metadata = _operation_response_metadata(
+            lm, responses, prompt, self, "aggregate"
+        )
 
         self.logger.debug("Responses from LM: %s", responses)
 
@@ -605,8 +700,13 @@ class Aggregate(Operation):
 
         if isinstance(parsed, dict):
             parsed = [parsed]
-        for new_state in parsed:
-            self.thoughts.append(Thought({**base_state, **new_state}))
+        for index, new_state in enumerate(parsed):
+            self.thoughts.append(
+                Thought(
+                    {**base_state, **new_state},
+                    metadata=_metadata_for_created_thought(response_metadata, index),
+                )
+            )
 
 
 class KeepBestN(Operation):
