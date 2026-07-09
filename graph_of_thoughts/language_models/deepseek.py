@@ -221,7 +221,7 @@ class DeepSeek(AbstractLanguageModel):
         :return: 响应文本列表
         :rtype: List[str]
         """
-        # typing.List is not valid for isinstance(); use built-in list.
+        # typing.List 不能用于 isinstance()；这里使用内置 list。
         if not isinstance(query_response, list):
             query_response = [query_response]
         metadata = self._openai_chat_metadata(query_response, "deepseek")

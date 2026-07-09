@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 import json
 import logging
@@ -17,9 +16,9 @@ from graph_of_thoughts.parser import Parser
 
 class Controller:
     """
-    Controller class to manage the execution flow of the Graph of Operations,
-    generating the Graph Reasoning State.
-    This involves language models, graph operations, prompting, and parsing.
+    用于管理 Graph of Operations 执行流程的 Controller 类，
+    负责生成 Graph Reasoning State。
+    该流程涉及语言模型、图操作、提示词构造和响应解析。
     """
 
     def __init__(
@@ -34,24 +33,23 @@ class Controller:
         skip_marker: str = "[SKIP]",
     ) -> None:
         """
-        Initialize the Controller instance with the language model,
-        operations graph, prompter, parser, and problem parameters.
+        使用语言模型、operations graph、prompter、parser 和问题参数初始化 Controller 实例。
 
-        :param lm: An instance of the AbstractLanguageModel.
+        :param lm: AbstractLanguageModel 的实例。
         :type lm: AbstractLanguageModel
-        :param graph: The Graph of Operations to be executed.
+        :param graph: 要执行的 Graph of Operations。
         :type graph: OperationsGraph
-        :param prompter: An instance of the Prompter class, used to generate prompts.
+        :param prompter: Prompter 类的实例，用于生成提示词。
         :type prompter: Prompter
-        :param parser: An instance of the Parser class, used to parse responses.
+        :param parser: Parser 类的实例，用于解析响应。
         :type parser: Parser
-        :param problem_parameters: Initial parameters/state of the problem.
+        :param problem_parameters: 问题的初始参数或 state。
         :type problem_parameters: dict
-        :param skip_operation_ids: Operation ids to replace with a skip placeholder.
+        :param skip_operation_ids: 要替换为 skip 占位符的 operation id。
         :type skip_operation_ids: set
-        :param skip_operation_indices: Operation positions in graph.operations to skip.
+        :param skip_operation_indices: graph.operations 中要跳过的 operation 位置。
         :type skip_operation_indices: set
-        :param skip_marker: Placeholder text used for skipped nodes.
+        :param skip_marker: 跳过节点使用的占位文本。
         :type skip_marker: str
         """
         self.logger = logging.getLogger(self.__class__.__module__)
@@ -67,11 +65,10 @@ class Controller:
 
     def run(self) -> None:
         """
-        Run the controller and execute the operations from the Graph of
-        Operations based on their readiness.
-        Ensures the program is in a valid state before execution.
-        :raises AssertionError: If the Graph of Operation has no roots.
-        :raises AssertionError: If the successor of an operation is not in the Graph of Operations.
+        运行 controller，并根据 operation 是否就绪来执行 Graph of Operations 中的操作。
+        执行前会确保程序处于有效状态。
+        :raises AssertionError: 如果 Graph of Operation 没有 root。
+        :raises AssertionError: 如果某个 operation 的后继不在 Graph of Operations 中。
         """
         self.logger.debug("Checking that the program is in a valid state")
         assert self.graph.roots is not None, "The operations graph has no root"
@@ -113,20 +110,20 @@ class Controller:
 
     def get_final_thoughts(self) -> List[List[Thought]]:
         """
-        Retrieve the final thoughts after all operations have been executed.
+        获取所有 operation 执行完成后的最终 thoughts。
 
-        :return: List of thoughts for each operation in the graph's leaves.
+        :return: 图中每个叶子 operation 的 thoughts 列表。
         :rtype: List[List[Thought]]
-        :raises AssertionError: If the `run` method hasn't been executed yet.
+        :raises AssertionError: 如果尚未执行 `run` 方法。
         """
         assert self.run_executed, "The run method has not been executed"
         return [operation.get_thoughts() for operation in self.graph.leaves]
 
     def output_graph(self, path: str) -> None:
         """
-        Serialize the state and results of the operations graph to a JSON file.
+        将 operations graph 的状态和结果序列化为 JSON 文件。
 
-        :param path: The path to the output file.
+        :param path: 输出文件路径。
         :type path: str
         """
         output = []
@@ -156,7 +153,8 @@ class Controller:
                 operation_serialized["scored"] = [
                     thought.scored for thought in thoughts
                 ]
-                operation_serialized["scores"] = [thought.score for thought in thoughts]
+                operation_serialized[("scor"
+                                      "es")] = [thought.score for thought in thoughts]
             if any([thought.validated for thought in thoughts]):
                 operation_serialized["validated"] = [
                     thought.validated for thought in thoughts

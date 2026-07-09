@@ -1,11 +1,10 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
-# contributions: Robert Gerstenberger
+# 主要作者：Nils Blach
+# 贡献者：Robert Gerstenberger
 
 import json
 import os
@@ -119,7 +118,7 @@ def plot_results(
     display_right_ylabel=False,
 ):
     methods_order = [method for method in methods_order if method in results]
-    # Extract scores based on the order
+    # 根据顺序提取分数
     if name == "set_intersection":
         scores_ordered = [
             [min(score, length) for score in results[method]["scores"] if score != 1000]
@@ -149,19 +148,19 @@ def plot_results(
         ]
     total_costs = [sum(results[method]["costs"]) for method in methods_order]
 
-    # Create figure and axis
+    # 创建图和坐标轴
     if name == "keyword_counting" or name == "document_merging":
         fig, ax = plt.subplots(dpi=150, figsize=(3.75, 5))
     else:
         fig, ax = plt.subplots(dpi=150, figsize=(2.5, 5))
 
-    # Create boxplots
+    # 创建箱线图
     positions = range(1, len(methods_order) + 1)
     ax.boxplot(scores_ordered, positions=positions)
 
     fig_fontsize = 12
 
-    # Set the ticks and labels
+    # 设置刻度和标签
     plt.yticks(fontsize=fig_fontsize)
     ax.set_xticks(range(1, len(methods_order) + 1))
     ax.set_xticks(range(1, len(methods_order) + 1))
@@ -206,7 +205,7 @@ def plot_results(
     tick_interval = cost_upper / (number_of_ticks)
     ax2_ticks = [tick_interval * i for i in range(number_of_ticks)]
 
-    # Set custom tick positions for ax2
+    # 为 ax2 设置自定义刻度位置
     ax2.set_yticks(ax2_ticks)
 
     if display_right_ylabel:

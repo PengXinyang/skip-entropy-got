@@ -1,39 +1,22 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 from typing import Dict, List
 
 
 def string_to_list(string: str) -> List[int]:
-    """
-    Helper function to convert a list encoded inside a string into a Python
-    list object of string elements.
-
-    :param string: Input string containing a list.
-    :type string: str
-    :return: List of string elements.
-    :rtype: List[str]
-    :raise AssertionError: If input string does not contain a list.
-    """
+    """将字符串中编码的列表转换为 Python 列表对象的辅助函数。"""
 
     assert string[0] == "[" and string[-1] == "]", "String is not a list."
     return [int(num) for num in string[1:-1].split(",")]
 
 
 def test_sorting(state: Dict) -> bool:
-    """
-    Function to test whether the final solution matches ground truth.
-
-    :param state: Thought state that represents the final solution.
-    :type state: Dict
-    :return: Returns whether the solution matches the ground truth.
-    :rtype: bool
-    """
+    """测试最终解是否与 ground truth 匹配的函数。"""
 
     try:
         correct_list = sorted(string_to_list(state["original"]))
@@ -44,14 +27,7 @@ def test_sorting(state: Dict) -> bool:
 
 
 def num_errors(state: Dict) -> float:
-    """
-    Function to locally count the number of errors that serves as a score.
-
-    :param state: Thought state to be scored.
-    :type state: Dict
-    :return: Number of errors.
-    :rtype: float
-    """
+    """本地统计错误数量并将其作为分数的函数。"""
 
     try:
         unsorted_list = state["original"]

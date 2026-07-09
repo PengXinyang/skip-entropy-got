@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Ales Kubicek
+# 主要作者：Ales Kubicek
 
 import os
 import torch
@@ -14,38 +13,38 @@ from .abstract_language_model import AbstractLanguageModel
 
 class Llama2HF(AbstractLanguageModel):
     """
-    An interface to use LLaMA 2 models through the HuggingFace library.
+    通过 HuggingFace 库使用 LLaMA 2 模型的接口。
     """
 
     def __init__(
         self, config_path: str = "", model_name: str = "llama7b-hf", cache: bool = False
     ) -> None:
         """
-        Initialize an instance of the Llama2HF class with configuration, model details, and caching options.
+        使用配置、模型信息和缓存选项初始化 Llama2HF 实例。
 
-        :param config_path: Path to the configuration file. Defaults to an empty string.
+        :param config_path: 配置文件路径。默认为空字符串。
         :type config_path: str
-        :param model_name: Specifies the name of the LLaMA model variant. Defaults to "llama7b-hf".
-                           Used to select the correct configuration.
+        :param model_name: 指定 LLaMA 模型变体名称。默认为 "llama7b-hf"。
+                           用于选择正确配置。
         :type model_name: str
-        :param cache: Flag to determine whether to cache responses. Defaults to False.
+        :param cache: 是否缓存响应。默认为 False。
         :type cache: bool
         """
         super().__init__(config_path, model_name, cache)
         self.config: Dict = self.config[model_name]
-        # Detailed id of the used model.
+        # 所用模型的详细 id。
         self.model_id: str = self.config["model_id"]
-        # Costs for 1000 tokens.
+        # 每 1000 个 token 的成本。
         self.prompt_token_cost: float = self.config["prompt_token_cost"]
         self.response_token_cost: float = self.config["response_token_cost"]
-        # The temperature is defined as the randomness of the model's output.
+        # temperature 表示模型输出的随机性。
         self.temperature: float = self.config["temperature"]
-        # Top K sampling.
+        # Top K 采样。
         self.top_k: int = self.config["top_k"]
-        # The maximum number of tokens to generate in the chat completion.
+        # 聊天补全中最多生成的 token 数量。
         self.max_tokens: int = self.config["max_tokens"]
 
-        # Important: must be done before importing transformers
+        # 注意：必须在导入 transformers 前完成。
         os.environ["TRANSFORMERS_CACHE"] = self.config["cache_dir"]
         import transformers
 
@@ -75,13 +74,13 @@ class Llama2HF(AbstractLanguageModel):
 
     def query(self, query: str, num_responses: int = 1) -> List[Dict]:
         """
-        Query the LLaMA 2 model for responses.
+        查询 LLaMA 2 模型以获取响应。
 
-        :param query: The query to be posed to the language model.
+        :param query: 发送给语言模型的查询。
         :type query: str
-        :param num_responses: Number of desired responses, default is 1.
+        :param num_responses: 期望的响应数量，默认为 1。
         :type num_responses: int
-        :return: Response(s) from the LLaMA 2 model.
+        :return: LLaMA 2 模型返回的响应。
         :rtype: List[Dict]
         """
         if self.cache and query in self.response_cache:
@@ -109,11 +108,11 @@ class Llama2HF(AbstractLanguageModel):
 
     def get_response_texts(self, query_responses: List[Dict]) -> List[str]:
         """
-        Extract the response texts from the query response.
+        从查询响应中提取响应文本。
 
-        :param query_responses: The response list of dictionaries generated from the `query` method.
+        :param query_responses: `query` 方法生成的响应字典列表。
         :type query_responses: List[Dict]
-        :return: List of response strings.
+        :return: 响应字符串列表。
         :rtype: List[str]
         """
         texts = [query_response["generated_text"] for query_response in query_responses]

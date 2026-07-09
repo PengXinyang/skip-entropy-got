@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 import backoff
 import os
@@ -19,36 +18,36 @@ from .abstract_language_model import AbstractLanguageModel
 
 class ChatGPT(AbstractLanguageModel):
     """
-    The ChatGPT class handles interactions with the OpenAI models using the provided configuration.
+    ChatGPT 类使用提供的配置处理与 OpenAI 模型的交互。
 
-    Inherits from the AbstractLanguageModel and implements its abstract methods.
+    该类继承 AbstractLanguageModel，并实现其抽象方法。
     """
 
     def __init__(
         self, config_path: str = "", model_name: str = "chatgpt", cache: bool = False
     ) -> None:
         """
-        Initialize the ChatGPT instance with configuration, model details, and caching options.
+        使用配置、模型信息和缓存选项初始化 ChatGPT 实例。
 
-        :param config_path: Path to the configuration file. Defaults to "".
+        :param config_path: 配置文件路径。默认为 ""。
         :type config_path: str
-        :param model_name: Name of the model, default is 'chatgpt'. Used to select the correct configuration.
+        :param model_name: 模型名称，默认为 'chatgpt'。用于选择正确配置。
         :type model_name: str
-        :param cache: Flag to determine whether to cache responses. Defaults to False.
+        :param cache: 是否缓存响应。默认为 False。
         :type cache: bool
         """
         super().__init__(config_path, model_name, cache)
         self.config: Dict = self.config[model_name]
-        # The model_id is the id of the model that is used for chatgpt, i.e. gpt-4, gpt-3.5-turbo, etc.
+        # model_id 是 chatgpt 使用的模型 id，例如 gpt-4、gpt-3.5-turbo 等。
         self.model_id: str = self.config["model_id"]
-        # The prompt_token_cost and response_token_cost are the costs for 1000 prompt tokens and 1000 response tokens respectively.
+        # prompt_token_cost 和 response_token_cost 分别是每 1000 个 prompt token 和 response token 的成本。
         self.prompt_token_cost: float = self.config["prompt_token_cost"]
         self.response_token_cost: float = self.config["response_token_cost"]
-        # The temperature of a model is defined as the randomness of the model's output.
+        # temperature 表示模型输出的随机性。
         self.temperature: float = self.config["temperature"]
-        # The maximum number of tokens to generate in the chat completion.
+        # 聊天补全中最多生成的 token 数量。
         self.max_tokens: int = self.config["max_tokens"]
-        # The stop sequence is a sequence of tokens that the model will stop generating at (it will not generate the stop sequence).
+        # stop sequence 是让模型停止生成的 token 序列，模型不会生成该序列本身。
         self.stop: Union[str, List[str]] = self.config["stop"]
         # collect_logprobs: 是否向 API 请求 token 级 logprob 信息。
         # 只有开启后，后续 thought_metadata 才可能包含 entropy/logprob 字段。
@@ -56,27 +55,27 @@ class ChatGPT(AbstractLanguageModel):
         # top_logprobs: 每个生成位置返回概率最高的几个候选 token。
         # 例如 5 表示返回 top-5 候选，用这些候选概率近似计算 token entropy。
         self.top_logprobs: int = int(self.config.get("top_logprobs", 5))
-        # The account organization is the organization that is used for chatgpt.
+        # account organization 是 chatgpt 使用的组织。
         self.organization: str = self.config["organization"]
         if self.organization == "":
             self.logger.warning("OPENAI_ORGANIZATION is not set")
         self.api_key: str = os.getenv("OPENAI_API_KEY", self.config["api_key"])
         if self.api_key == "":
             raise ValueError("OPENAI_API_KEY is not set")
-        # Initialize the OpenAI Client
+        # 初始化 OpenAI Client。
         self.client = OpenAI(api_key=self.api_key, organization=self.organization)
 
     def query(
         self, query: str, num_responses: int = 1
     ) -> Union[List[ChatCompletion], ChatCompletion]:
         """
-        Query the OpenAI model for responses.
+        查询 OpenAI 模型以获取响应。
 
-        :param query: The query to be posed to the language model.
+        :param query: 发送给语言模型的查询。
         :type query: str
-        :param num_responses: Number of desired responses, default is 1.
+        :param num_responses: 期望的响应数量，默认为 1。
         :type num_responses: int
-        :return: Response(s) from the OpenAI model.
+        :return: OpenAI 模型返回的响应。
         :rtype: Dict
         """
         if self.cache and query in self.response_cache:
@@ -110,14 +109,14 @@ class ChatGPT(AbstractLanguageModel):
     @backoff.on_exception(backoff.expo, OpenAIError, max_time=10, max_tries=6)
     def chat(self, messages: List[Dict], num_responses: int = 1) -> ChatCompletion:
         """
-        Send chat messages to the OpenAI model and retrieves the model's response.
-        Implements backoff on OpenAI error.
+        向 OpenAI 模型发送聊天消息并获取模型响应。
+        遇到 OpenAI 错误时使用 backoff 重试。
 
-        :param messages: A list of message dictionaries for the chat.
+        :param messages: 聊天消息字典列表。
         :type messages: List[Dict]
-        :param num_responses: Number of desired responses, default is 1.
+        :param num_responses: 期望的响应数量，默认为 1。
         :type num_responses: int
-        :return: The OpenAI model's response.
+        :return: OpenAI 模型的响应。
         :rtype: ChatCompletion
         """
         create_kwargs = {
@@ -163,11 +162,11 @@ class ChatGPT(AbstractLanguageModel):
         self, query_response: Union[List[ChatCompletion], ChatCompletion]
     ) -> List[str]:
         """
-        Extract the response texts from the query response.
+        从查询响应中提取响应文本。
 
-        :param query_response: The response dictionary (or list of dictionaries) from the OpenAI model.
+        :param query_response: OpenAI 模型返回的响应字典或字典列表。
         :type query_response: Union[List[ChatCompletion], ChatCompletion]
-        :return: List of response strings.
+        :return: 响应字符串列表。
         :rtype: List[str]
         """
         if not isinstance(query_response, list):

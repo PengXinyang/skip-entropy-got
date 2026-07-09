@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 from __future__ import annotations
 from typing import List
@@ -14,14 +13,14 @@ from graph_of_thoughts.operations.operations import Operation
 
 class GraphOfOperations:
     """
-    Represents the Graph of Operations, which prescribes the execution plan of thought operations.
+    表示 Graph of Operations，用于规定 thought operations 的执行计划。
     """
 
     def __init__(self) -> None:
         """
-        Initializes a new Graph of Operations instance with empty operations, roots, and leaves.
-        The roots are the entry points in the graph with no predecessors.
-        The leaves are the exit points in the graph with no successors.
+        初始化新的 Graph of Operations 实例，并设置空的 operations、roots 和 leaves。
+        roots 是图中没有前驱的入口点。
+        leaves 是图中没有后继的出口点。
         """
         self.operations: List[Operation] = []
         self.roots: List[Operation] = []
@@ -29,9 +28,9 @@ class GraphOfOperations:
 
     def append_operation(self, operation: Operation) -> None:
         """
-        Appends an operation to all leaves in the graph and updates the relationships.
+        将一个 operation 追加到图中的所有叶子节点之后，并更新关系。
 
-        :param operation: The operation to append.
+        :param operation: 要追加的 operation。
         :type operation: Operation
         """
         self.operations.append(operation)
@@ -46,10 +45,10 @@ class GraphOfOperations:
 
     def add_operation(self, operation: Operation) -> None:
         """
-        Add an operation to the graph considering its predecessors and successors.
-        Adjust roots and leaves based on the added operation's position within the graph.
+        在考虑前驱和后继的情况下向图中添加 operation。
+        根据新增 operation 在图中的位置调整 roots 和 leaves。
 
-        :param operation: The operation to add.
+        :param operation: 要添加的 operation。
         :type operation: Operation
         """
         self.operations.append(operation)

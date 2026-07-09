@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 import os
 import logging
@@ -14,7 +13,7 @@ import csv
 from typing import Dict, List, Callable, Union
 from graph_of_thoughts import controller, language_models, operations, prompter, parser
 
-# This is a hack to also allow execution of this file from the examples directory
+# 这是一个兼容处理，使该文件也可以从 examples 目录执行
 try:
     from . import utils
 except ImportError:
@@ -23,10 +22,9 @@ except ImportError:
 
 class SortingPrompter(prompter.Prompter):
     """
-    SortingPrompter provides the generation of prompts specific to the sorting
-    example for the language models.
+    SortingPrompter 为语言模型生成排序示例专用的提示词。
 
-    Inherits from the Prompter class and implements its abstract methods.
+    继承 Prompter 类并实现其抽象方法。
     """
 
     sort_prompt = """<Instruction> Sort the following list of numbers in ascending order. Output only the sorted list of numbers, no additional text. </Instruction>
@@ -160,14 +158,13 @@ Merged list:
 
     def aggregation_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate an aggregation prompt for the language model.
+        为语言模型生成 aggregation prompt。
 
-        :param state_dicts: The thought states that should be aggregated.
+        :param state_dicts: 应该被聚合的 thought states。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The aggregation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: aggregation prompt。
         :rtype: str
-        :raise AssertionError: If not exactly two thought states are provided.
         """
         assert len(state_dicts) == 2, "Expected two states for aggregation prompt."
         len_input1 = len(utils.string_to_list(state_dicts[0]["current"]))
@@ -190,20 +187,13 @@ Merged list:
         self, num_branches: int, original: str, current: str, method: str, **kwargs
     ) -> str:
         """
-        Generate a generate prompt for the language model.
+        为语言模型生成 generate prompt。
 
-        :param num_branches: The number of responses the prompt should ask the LM to generate.
+        :param num_branches: 提示词要求 LM 生成的响应数量。
         :type num_branches: int
-        :param original: Input list of numbers.
-        :type original: str
-        :param current: Intermediate solution.
-        :type current: str
-        :param method: Method for which the generate prompt is generated.
-        :type method: str
-        :param kwargs: Additional keyword arguments.
-        :return: The generate prompt.
+        :param kwargs: 额外关键字参数。
+        :return: generate prompt。
         :rtype: str
-        :raise AssertionError: If the requested number of branches is not one.
         """
 
         assert num_branches == 1, "Branching should be done via multiple requests."
@@ -226,7 +216,7 @@ Merged list:
         elif method.startswith("got"):
             if current is None or current == "":
                 return self.got_split_prompt.format(input=input)
-            # if current is just a sublist of the original input, return the split prompt
+            # 如果 current 只是原始输入的子列表，则返回 split prompt
             if kwargs["phase"] == 1:
                 return self.sort_prompt.format(input=current)
 
@@ -245,33 +235,32 @@ Merged list:
 
     def improve_prompt(self, **kwargs) -> str:
         """
-        Generate an improve prompt for the language model.
+        为语言模型生成 improve prompt。
 
-        :param kwargs: Additional keyword arguments.
-        :return: The improve prompt.
+        :param kwargs: 额外关键字参数。
+        :return: improve prompt。
         :rtype: str
         """
         pass
 
     def validation_prompt(self, **kwargs) -> str:
         """
-        Generate a validation prompt for the language model.
+        为语言模型生成 validation prompt。
 
-        :param kwargs: Additional keyword arguments.
-        :return: The validation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: validation prompt。
         :rtype: str
         """
         pass
 
     def score_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate a score prompt for the language model.
+        为语言模型生成 score prompt。
 
-        :param state_dicts: The thought states that should be scored,
-                            if more than one, they should be scored together.
+        :param state_dicts: 应该被打分的 thought states；如果超过一个，则应该一起打分。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The score prompt.
+        :param kwargs: 额外关键字参数。
+        :return: score prompt。
         :rtype: str
         """
         pass
@@ -279,31 +268,27 @@ Merged list:
 
 class SortingParser(parser.Parser):
     """
-    SortingParser provides the parsing of language model reponses specific to
-    the sorting example.
+    SortingParser 解析排序示例中语言模型的响应。
 
-    Inherits from the Parser class and implements its abstract methods.
+    继承 Parser 类并实现其抽象方法。
     """
 
     def __init__(self) -> None:
-        """
-        Inits the response cache.
-        """
+        """初始化响应缓存。"""
         self.cache = {}
 
     def parse_aggregation_answer(
         self, states: List[Dict], texts: List[str]
     ) -> Union[Dict, List[Dict]]:
         """
-        Parse the response from the language model for an aggregation prompt.
+        解析语言模型对 aggregation prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the respones from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: Union[Dict, List[Dict]]
-        :raise AssertionError: If not exactly two thought states are provided.
         """
 
         assert len(states) == 2, "Expected two states for aggregation answer."
@@ -311,7 +296,7 @@ class SortingParser(parser.Parser):
         for text in texts:
             answers = text.strip().split("\n")
             if any(["Output" in answer for answer in answers]):
-                # cut elements until last output is found
+                # 截断元素，直到找到最后一个输出
                 for answer in reversed(answers):
                     if "Output" in answer:
                         answers = answers[answers.index(answer) :]
@@ -353,20 +338,20 @@ class SortingParser(parser.Parser):
 
     def parse_generate_answer(self, state: Dict, texts: List[str]) -> List[Dict]:
         """
-        Parse the response from the language model for a generate prompt.
+        解析语言模型对 generate prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the respones from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: List[Dict]
         """
         new_states = []
         for text in texts:
             if state["method"] == "got" and state["current"] == "":
-                # We expect a json which contains the four lists named "List 1" to "List 4"
-                # cut everything until the opening bracket and everything after the closing bracket
+                # 期望得到一个 json，其中包含名为 "List 1" 到 "List 4" 的四个列表
+                # 截断元素，直到找到最后一个输出
 
                 try:
                     text = text[text.index("{") : text.index("}") + 1]
@@ -399,7 +384,7 @@ class SortingParser(parser.Parser):
                     answer for answer in answers if "[" in answer and "]" in answer
                 ]
                 if any(["Output" in answer for answer in answers]):
-                    # cut elements until last output is found
+                    # 截断元素，直到找到最后一个输出
                     for answer in reversed(answers):
                         if "Output" in answer:
                             answers = answers[answers.index(answer) :]
@@ -429,39 +414,39 @@ class SortingParser(parser.Parser):
 
     def parse_improve_answer(self, state: Dict, texts: List[str]) -> Dict:
         """
-        Parse the response from the language model for an improve prompt.
+        解析语言模型对 improve prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought state after parsing the responses from the language model.
+        :return: 解析语言模型响应后得到的新 thought state。
         :rtype: Dict
         """
         pass
 
     def parse_validation_answer(self, state: Dict, texts: List[str]) -> bool:
         """
-        Parse the response from the language model for a validation prompt.
+        解析语言模型对 validation prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: Whether the thought state is valid or not.
+        :return: thought state 是否有效。
         :rtype: bool
         """
         pass
 
     def parse_score_answer(self, states: List[Dict], texts: List[str]) -> List[float]:
         """
-        Parse the response from the language model for a score prompt.
+        解析语言模型对 score prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The scores for the thought states.
+        :return: thought states 的分数。
         :rtype: List[float]
         """
         pass
@@ -469,9 +454,9 @@ class SortingParser(parser.Parser):
 
 def io() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the IO method.
+    为 IO 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -485,9 +470,9 @@ def io() -> operations.GraphOfOperations:
 
 def cot() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the CoT method.
+    为 CoT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -501,10 +486,9 @@ def cot() -> operations.GraphOfOperations:
 
 def tot() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the ToT method.
-    ToT uses a wider tree, where on each level there are more branches.
+    为 ToT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -530,10 +514,9 @@ def tot() -> operations.GraphOfOperations:
 
 def tot2() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the ToT2 method.
-    ToT2 uses a tree with more levels, but with fewer branches per level.
+    为 ToT2 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -563,9 +546,9 @@ def tot2() -> operations.GraphOfOperations:
 
 def got() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the GoT method.
+    为 GoT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -662,18 +645,17 @@ def run(
     lm_name: str,
 ) -> float:
     """
-    Controller function that executes each specified method for each specified
-    sample while the budget is not exhausted.
+    Controller 函数：在预算未耗尽时，对每个指定样本执行每个指定方法。
 
-    :param data_ids: Indices of the sample to be run.
+    :param data_ids: 要运行的样本索引。
     :type data_ids: List[int]
-    :param methods: List of functions to generate Graphs of Operations.
-    :type methods: Each function generates a Graph of Operation.
-    :param budget: Language model budget for the execution in dollars.
+    :param methods: 用于生成 Graphs of Operations 的函数列表。
+    :type methods: 每个函数都会生成一个 Graph of Operation。
+    :param budget: 执行使用的语言模型预算，单位为美元。
     :type budget: float
-    :param lm_name: Name of the language model to be used.
+    :param lm_name: 要使用的语言模型名称。
     :type lm_name: str
-    :return: Spent budget in dollars.
+    :return: 已花费预算，单位为美元。
     :rtype: float
     """
 
@@ -717,7 +699,7 @@ def run(
     )
 
     for method in methods:
-        # create a results directory for the method
+        # 检查无效国家和形容词
         os.makedirs(os.path.join(results_folder, method.__name__))
 
     for data in selected_data:

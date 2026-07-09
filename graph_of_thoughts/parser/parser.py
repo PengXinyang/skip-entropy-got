@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main authors: Robert Gerstenberger, Nils Blach
+# 主要作者：Robert Gerstenberger, Nils Blach
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
@@ -13,8 +12,8 @@ from typing import Dict, List, Union
 
 class Parser(ABC):
     """
-    Abstract base class that defines the interface for all parsers.
-    Parsers are used to parse the responses from the language models.
+    定义所有 parser 接口的抽象基类。
+    Parser 用于解析语言模型返回的响应。
     """
 
     @abstractmethod
@@ -22,13 +21,13 @@ class Parser(ABC):
         self, states: List[Dict], texts: List[str]
     ) -> Union[Dict, List[Dict]]:
         """
-        Parse the response from the language model for a aggregation prompt.
+        解析语言模型对 aggregation prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the response from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: Union[Dict, List[Dict]]
         """
         pass
@@ -36,13 +35,13 @@ class Parser(ABC):
     @abstractmethod
     def parse_improve_answer(self, state: Dict, texts: List[str]) -> Dict:
         """
-        Parse the response from the language model for an improve prompt.
+        解析语言模型对 improve prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought state after parsing the response from the language model.
+        :return: 解析语言模型响应后得到的新 thought state。
         :rtype: Dict
         """
         pass
@@ -50,13 +49,13 @@ class Parser(ABC):
     @abstractmethod
     def parse_generate_answer(self, state: Dict, texts: List[str]) -> List[Dict]:
         """
-        Parse the response from the language model for a generate prompt.
+        解析语言模型对 generate prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the response from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: List[Dict]
         """
         pass
@@ -64,13 +63,13 @@ class Parser(ABC):
     @abstractmethod
     def parse_validation_answer(self, state: Dict, texts: List[str]) -> bool:
         """
-        Parse the response from the language model for a validation prompt.
+        解析语言模型对 validation prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: Whether the thought state is valid or not.
+        :return: thought state 是否有效。
         :rtype: bool
         """
         pass
@@ -78,13 +77,13 @@ class Parser(ABC):
     @abstractmethod
     def parse_score_answer(self, states: List[Dict], texts: List[str]) -> List[float]:
         """
-        Parse the response from the language model for a score prompt.
+        解析语言模型对 score prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The scores for the thought states.
+        :return: thought states 的分数。
         :rtype: List[float]
         """
         pass

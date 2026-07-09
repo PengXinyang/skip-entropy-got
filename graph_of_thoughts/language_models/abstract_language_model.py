@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Union, Any
@@ -17,20 +16,20 @@ import time
 
 class AbstractLanguageModel(ABC):
     """
-    Abstract base class that defines the interface for all language models.
+    定义所有语言模型接口的抽象基类。
     """
 
     def __init__(
         self, config_path: str = "", model_name: str = "", cache: bool = False
     ) -> None:
         """
-        Initialize the AbstractLanguageModel instance with configuration, model details, and caching options.
+        使用配置、模型信息和缓存选项初始化 AbstractLanguageModel 实例。
 
-        :param config_path: Path to the config file. Defaults to "".
+        :param config_path: 配置文件路径。默认为 ""。
         :type config_path: str
-        :param model_name: Name of the language model. Defaults to "".
+        :param model_name: 语言模型名称。默认为 ""。
         :type model_name: str
-        :param cache: Flag to determine whether to cache responses. Defaults to False.
+        :param cache: 是否缓存响应。默认为 False。
         :type cache: bool
         """
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -49,14 +48,13 @@ class AbstractLanguageModel(ABC):
 
     def _now(self) -> float:
         """
-        Return the current wall-clock time for latency measurements.
+        返回当前墙钟时间，用于延迟测量。
         """
         return time.perf_counter()
 
     def _calculate_cost(self) -> None:
         """
-        Recalculate cumulative cost from cumulative token counters when the
-        concrete model exposes OpenAI-style token prices.
+        当具体模型提供 OpenAI 风格的 token 价格时，根据累计 token 计数重新计算累计成本。
         """
         prompt_token_cost = getattr(self, "prompt_token_cost", 0.0)
         response_token_cost = getattr(self, "response_token_cost", 0.0)
@@ -69,8 +67,8 @@ class AbstractLanguageModel(ABC):
 
     def _entropy_from_top_logprobs(self, top_logprobs: List[Any]) -> Union[float, None]:
         """
-        Approximate token entropy from a provider's top-logprobs list. This is a
-        lower-bound style estimate if the provider returns only top-k tokens.
+        根据 provider 返回的 top-logprobs 列表近似计算 token 熵。
+        如果 provider 只返回 top-k token，则这是下界风格的估计。
         """
         # top_logprobs 是模型在某个生成位置上返回的“概率最高的 k 个候选 token”
         # 及其 log 概率。完整熵需要整个词表分布；这里只能用 top-k 概率做近似。
@@ -93,9 +91,8 @@ class AbstractLanguageModel(ABC):
 
     def _extract_choice_logprob_metadata(self, choice: Any) -> Dict[str, Any]:
         """
-        Extract token-level observability fields from OpenAI-compatible choices.
-        The exact logprobs schema differs slightly across providers, so this
-        method uses defensive attribute/dict access.
+        从 OpenAI 兼容的 choices 中提取 token 级可观测字段。
+        不同 provider 的 logprobs schema 略有差异，因此这里使用防御性的属性和字典访问。
         """
         choice_logprobs = getattr(choice, "logprobs", None)
         if choice_logprobs is None:
@@ -158,7 +155,7 @@ class AbstractLanguageModel(ABC):
         metadata: List[Dict[str, Any]],
     ) -> None:
         """
-        Store metadata aligned with the list returned by get_response_texts().
+        保存与 get_response_texts() 返回列表对齐的元数据。
         """
         self.last_response_metadata = metadata
 
@@ -166,8 +163,8 @@ class AbstractLanguageModel(ABC):
         self, expected_count: int = 0
     ) -> List[Dict[str, Any]]:
         """
-        Return metadata from the most recent get_response_texts() call and pad or
-        trim it to the number of response texts the caller is handling.
+        返回最近一次 get_response_texts() 调用产生的元数据，
+        并按调用方正在处理的响应文本数量进行填充或截断。
         """
         metadata = list(self.last_response_metadata or [])
         if expected_count > 0:
@@ -184,7 +181,7 @@ class AbstractLanguageModel(ABC):
         provider: str,
     ) -> List[Dict[str, Any]]:
         """
-        Build per-choice metadata for OpenAI-compatible ChatCompletion objects.
+        为 OpenAI 兼容的 ChatCompletion 对象构造逐 choice 元数据。
         """
         if not isinstance(query_response, list):
             query_response = [query_response]
@@ -222,10 +219,9 @@ class AbstractLanguageModel(ABC):
 
     def load_config(self, path: str) -> None:
         """
-        Load configuration from a specified path.
+        从指定路径加载配置。
 
-        :param path: Path to the config file. If an empty path provided,
-                     default is `config.json` in the current directory.
+        :param path: 配置文件路径。如果提供空路径，则默认使用当前目录中的 `config.json`。
         :type path: str
         """
         if path == "":
@@ -239,20 +235,20 @@ class AbstractLanguageModel(ABC):
 
     def clear_cache(self) -> None:
         """
-        Clear the response cache.
+        清空响应缓存。
         """
         self.response_cache.clear()
 
     @abstractmethod
     def query(self, query: str, num_responses: int = 1) -> Any:
         """
-        Abstract method to query the language model.
+        查询语言模型的抽象方法。
 
-        :param query: The query to be posed to the language model.
+        :param query: 发送给语言模型的查询。
         :type query: str
-        :param num_responses: The number of desired responses.
+        :param num_responses: 期望的响应数量。
         :type num_responses: int
-        :return: The language model's response(s).
+        :return: 语言模型的响应。
         :rtype: Any
         """
         pass
@@ -260,11 +256,11 @@ class AbstractLanguageModel(ABC):
     @abstractmethod
     def get_response_texts(self, query_responses: Union[List[Any], Any]) -> List[str]:
         """
-        Abstract method to extract response texts from the language model's response(s).
+        从语言模型响应中提取响应文本的抽象方法。
 
-        :param query_responses: The responses returned from the language model.
+        :param query_responses: 语言模型返回的响应。
         :type query_responses: Union[List[Any], Any]
-        :return: List of textual responses.
+        :return: 文本响应列表。
         :rtype: List[str]
         """
         pass

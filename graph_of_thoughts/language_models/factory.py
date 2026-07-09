@@ -39,7 +39,7 @@ def build_language_model(
     lower = normalized.lower()
 
     if lower.endswith("-gcli"):
-        # 延迟导入，避免未安装/未使用时影响其它模型
+        # 延迟导入，避免未安装或未使用时影响其它模型。
         from graph_of_thoughts.language_models.gcli_gemini import GCLIGemini
         return GCLIGemini(
             config_path,

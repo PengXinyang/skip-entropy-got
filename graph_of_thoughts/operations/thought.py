@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 from __future__ import annotations
 import logging
@@ -14,7 +13,7 @@ import itertools
 
 class Thought:
     """
-    Represents an LLM thought with its state, constructed by the parser, and various flags.
+    表示由 parser 构造的 LLM thought，包含其 state 和各种标记。
     """
 
     _ids: Iterator[int] = itertools.count(0)
@@ -25,9 +24,9 @@ class Thought:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Initializes a new Thought instance with a state and various default flags.
+        使用 state 和各种默认标记初始化新的 Thought 实例。
 
-        :param state: The state of the thought. Defaults to None.
+        :param state: thought 的 state。默认为 None。
         :type state: Optional[Dict]
         """
         self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
@@ -46,10 +45,10 @@ class Thought:
     @staticmethod
     def from_thought(thought: Thought) -> Thought:
         """
-        Creates a new thought from an existing one.
+        基于已有 thought 创建一个新的 thought。
 
-        :param thought: An instance of a Thought to clone.
-        :return: A new Thought instance with properties copied from the input thought.
+        :param thought: 要克隆的 Thought 实例。
+        :return: 从输入 thought 复制属性得到的新 Thought 实例。
         """
         new_thought = Thought(thought.state)
         # 复制 Thought 时保留观测信息，便于 Score/KeepBestN/GroundTruth 后仍能追溯来源。
@@ -65,9 +64,9 @@ class Thought:
     @property
     def valid(self) -> bool:
         """
-        Returns the validity of the thought.
+        返回 thought 的有效性。
 
-        :return: The validity of the thought.
+        :return: thought 的有效性。
         :rtype: bool
         """
         return self._valid
@@ -75,9 +74,9 @@ class Thought:
     @valid.setter
     def valid(self, valid: bool) -> None:
         """
-        Sets the validity of the thought and the validated flag.
+        设置 thought 的有效性和 validated 标记。
 
-        :param valid: The validity of the thought.
+        :param valid: thought 的有效性。
         :type valid: bool
         """
         self.validated = True
@@ -86,9 +85,9 @@ class Thought:
     @property
     def score(self) -> float:
         """
-        Returns the score of the thought.
+        返回 thought 的分数。
 
-        :return: The score of the thought.
+        :return: thought 的分数。
         :rtype: float
         """
         return self._score
@@ -96,9 +95,9 @@ class Thought:
     @score.setter
     def score(self, new_score: float) -> None:
         """
-        Sets the score of the thought and the scored flag.
+        设置 thought 的分数和 scored 标记。
 
-        :param new_score: The score of the thought.
+        :param new_score: thought 的分数。
         :type new_score: float
         """
         self.scored = True
@@ -107,9 +106,9 @@ class Thought:
     @property
     def solved(self) -> bool:
         """
-        Returns the solved flag of the thought.
+        返回 thought 的 solved 标记。
 
-        :return: The solved flag of the thought.
+        :return: thought 的 solved 标记。
         :rtype: bool
         """
         return self._solved
@@ -117,9 +116,9 @@ class Thought:
     @solved.setter
     def solved(self, solved: bool) -> None:
         """
-        Sets the solved flag of the thought and the compared_to_ground_truth flag.
+        设置 thought 的 solved 标记和 compared_to_ground_truth 标记。
 
-        :param solved: Whether the thought contains a solution to the problem.
+        :param solved: thought 是否包含问题的解。
         :type solved: bool
         """
         self.compared_to_ground_truth = True

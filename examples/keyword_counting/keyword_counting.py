@@ -1,14 +1,12 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# The source code is adapted from the sorting source code written by
-# Nils Blach.
+# 本源代码改编自 Nils Blach 编写的 sorting 源代码。
 #
-# main author: Nils Blach
-# contributions: Ales Kubicek
+# 主要作者：Nils Blach
+# 贡献者：Ales Kubicek
 
 import os
 import logging
@@ -22,16 +20,7 @@ from graph_of_thoughts import controller, language_models, operations, prompter,
 
 
 def string_to_list(string: str) -> List[str]:
-    """
-    Helper function to convert a list encoded inside a string into a Python
-    list object of string elements.
-
-    :param string: Input string containing a list.
-    :type string: str
-    :return: List of string elements.
-    :rtype: List[str]
-    :raise AssertionError: If input string does not contain a list.
-    """
+    """将字符串中编码的列表转换为 Python 列表对象的辅助函数。"""
 
     assert string[0] == "[" and string[-1] == "]", "String is not a list."
     return [
@@ -41,30 +30,13 @@ def string_to_list(string: str) -> List[str]:
 
 
 def list_to_freq_dict(lst: List[str]) -> Dict[str, int]:
-    """
-    Helper function that converts a list of string elements, where each element
-    can occur multiple times, into a dictionary, where the elements are the keys
-    and the number of their occurrences in the input list is the value.
-
-    :param lst: List of string elements.
-    :type lst: List[str]
-    :return: Frequency dictionary of string elements.
-    :rtype: Dict[str, int]
-    """
+    """将字符串元素列表转换为频数字典的辅助函数，字典的 key 是元素，value 是出现次数。"""
 
     return dict(Counter(lst))
 
 
 def valid_aggregation(state: Dict) -> bool:
-    """
-    Helper function to determine whether the aggregation of two intermediate
-    solutions produces valid results.
-
-    :param state: Thought state resulting from an aggregation of thoughts.
-    :type state: Dict
-    :return: Returns whether the aggregation produced valid results.
-    :rtype: bool
-    """
+    """判断两个中间解的聚合结果是否有效的辅助函数。"""
 
     aggr1 = json.loads(state["aggr1"])
     aggr2 = json.loads(state["aggr2"])
@@ -83,16 +55,7 @@ def valid_aggregation(state: Dict) -> bool:
 
 
 def num_errors(all_possible_countries: List[str], state: Dict) -> float:
-    """
-    Function to locally count the number of errors that serves as a score.
-
-    :param all_possible_countries: List of keywords.
-    :type all_possible_countries: List[str]
-    :param state: Thought state to be scored.
-    :type state: Dict
-    :return: Number of errors.
-    :rtype: float
-    """
+    """本地统计错误数量并将其作为分数的函数。"""
 
     try:
         if (
@@ -103,7 +66,7 @@ def num_errors(all_possible_countries: List[str], state: Dict) -> float:
             text = state["sub_text"]
             correct_freq_dict = dict()
             for country in all_possible_countries:
-                # find number of times country appears in text
+                # 检查无效国家和形容词
                 num_occurrences = text.count(country)
                 correct_freq_dict[country] = num_occurrences
         else:
@@ -115,7 +78,7 @@ def num_errors(all_possible_countries: List[str], state: Dict) -> float:
         countries_not_in_correct = set(current_freq_dict.keys()) - set(
             correct_freq_dict.keys()
         )
-        # count the number of errors
+        # 统计错误数量
         num_errors = 0
         for country in countries_not_in_current:
             num_errors += abs(correct_freq_dict[country])
@@ -129,23 +92,16 @@ def num_errors(all_possible_countries: List[str], state: Dict) -> float:
 
 
 def test_keyword_counting(state: Dict) -> bool:
-    """
-    Function to test whether the final solution matches ground truth.
-
-    :param state: Thought state that represents the final solution.
-    :type state: Dict
-    :return: Returns whether the solution matches the ground truth.
-    :rtype: bool
-    """
+    """测试最终解是否与 ground truth 匹配的函数。"""
 
     try:
         ground_truth = state["ground_truth"]
         correct_freq_dict = list_to_freq_dict(string_to_list(ground_truth))
         current_freq_dict = json.loads(state["current"])
-        # check that the keys are the same
+        # 检查 key 是否相同
         if set(correct_freq_dict.keys()) != set(current_freq_dict.keys()):
             return False
-        # check that the values are the same
+        # 检查 value 是否相同
         for key in correct_freq_dict.keys():
             if correct_freq_dict[key] != current_freq_dict[key]:
                 return False
@@ -156,10 +112,9 @@ def test_keyword_counting(state: Dict) -> bool:
 
 class KeywordCountingPrompter(prompter.Prompter):
     """
-    KeywordCountingPrompter provides the generation of prompts specific to the
-    keyword counting example for the language models.
+    KeywordCountingPrompter 为语言模型生成关键词计数示例专用的提示词。
 
-    Inherits from the Prompter class and implements its abstract methods.
+    继承 Prompter 类并实现其抽象方法。
     """
 
     count_prompt = """<Instruction> Count the frequency of how many times each country is explicitly named in the input text. Output only the frequency of each country that appears at least once in the following json format; make sure to keep the same spelling and output no additional text:
@@ -730,14 +685,13 @@ Output:
 
     def aggregation_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate an aggregation prompt for the language model.
+        为语言模型生成 aggregation prompt。
 
-        :param state_dicts: The thought states that should be aggregated.
+        :param state_dicts: 应该被聚合的 thought states。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The aggregation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: aggregation prompt。
         :rtype: str
-        :raise AssertionError: If more than two thought states are provided.
         """
         assert len(state_dicts) <= 2, "Expected 2 states for aggregation prompt."
         if len(state_dicts) == 0:
@@ -752,20 +706,13 @@ Output:
         self, num_branches: int, original: str, current: str, method: str, **kwargs
     ) -> str:
         """
-        Generate a generate prompt for the language model.
+        为语言模型生成 generate prompt。
 
-        :param num_branches: The number of responses the prompt should ask the LM to generate.
+        :param num_branches: 提示词要求 LM 生成的响应数量。
         :type num_branches: int
-        :param original: Input text.
-        :type original: str
-        :param current: Intermediate solution.
-        :type current: str
-        :param method: Method for which the generate prompt is generated.
-        :type method: str
-        :param kwargs: Additional keyword arguments.
-        :return: The generate prompt.
+        :param kwargs: 额外关键字参数。
+        :return: generate prompt。
         :rtype: str
-        :raise AssertionError: If the requested number of branches is not one.
         """
 
         assert num_branches == 1, "Branching should be done via multiple requests."
@@ -813,16 +760,10 @@ Output:
 
     def improve_prompt(self, current: str, aggr1: str, aggr2: str, **kwargs) -> str:
         """
-        Generate an improve prompt for the language model.
+        为语言模型生成 improve prompt。
 
-        :param current: Intermediate solution.
-        :type current: str
-        :param aggr1: Partially solution 1 before aggregation.
-        :type aggr1: str
-        :param aggr2: Partially solution 2 before aggregation.
-        :type aggr2: str
-        :param kwargs: Additional keyword arguments.
-        :return: The improve prompt.
+        :param kwargs: 额外关键字参数。
+        :return: improve prompt。
         :rtype: str
         """
         return self.got_improve_aggregate_prompt.format(
@@ -831,23 +772,22 @@ Output:
 
     def validation_prompt(self, **kwargs) -> str:
         """
-        Generate a validation prompt for the language model.
+        为语言模型生成 validation prompt。
 
-        :param kwargs: Additional keyword arguments.
-        :return: The validation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: validation prompt。
         :rtype: str
         """
         pass
 
     def score_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate a score prompt for the language model.
+        为语言模型生成 score prompt。
 
-        :param state_dicts: The thought states that should be scored,
-                            if more than one, they should be scored together.
+        :param state_dicts: 应该被打分的 thought states；如果超过一个，则应该一起打分。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The score prompt.
+        :param kwargs: 额外关键字参数。
+        :return: score prompt。
         :rtype: str
         """
         pass
@@ -855,32 +795,22 @@ Output:
 
 class KeywordCountingParser(parser.Parser):
     """
-    KeywordCountingParser provides the parsing of language model reponses
-    specific to the keyword counting example.
+    KeywordCountingParser 解析关键词计数示例中语言模型的响应。
 
-    Inherits from the Parser class and implements its abstract methods.
+    继承 Parser 类并实现其抽象方法。
     """
 
     def __init__(self) -> None:
-        """
-        Inits the response cache.
-        """
+        """初始化响应缓存。"""
         self.cache = {}
 
     def strip_answer_json(self, text: str) -> str:
-        """
-        Helper function to retrieve a text from a json string.
-
-        :param text: Input json string.
-        :type text: str
-        :return: Retrieved text.
-        :rtype: str
-        """
+        """从 json 字符串中提取文本的辅助函数。"""
 
         text = text.strip()
         if "Output:" in text:
             text = text[text.index("Output:") + len("Output:") :].strip()
-        # find the last "{" and "}" and only keep the text in between including the brackets
+        # 查找最后一个 "{" 和 "}"，只保留包括括号在内的中间文本
         start = text.rfind("{")
         end = text.rfind("}")
         if start == -1 or end == -1:
@@ -896,15 +826,14 @@ class KeywordCountingParser(parser.Parser):
         self, states: List[Dict], texts: List[str]
     ) -> Union[Dict, List[Dict]]:
         """
-        Parse the response from the language model for an aggregation prompt.
+        解析语言模型对 aggregation prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the respones from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: Union[Dict, List[Dict]]
-        :raise AssertionError: If more than two thought states are provided.
         """
 
         assert len(states) <= 2, "Expected 2 states for aggregation answer."
@@ -930,15 +859,14 @@ class KeywordCountingParser(parser.Parser):
 
     def parse_improve_answer(self, state: Dict, texts: List[str]) -> Dict:
         """
-        Parse the response from the language model for an improve prompt.
+        解析语言模型对 improve prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought state after parsing the responses from the language model.
+        :return: 解析语言模型响应后得到的新 thought state。
         :rtype: Dict
-        :raise AssertionError: If there is not exactly one response text.
         """
 
         assert len(texts) == 1, "Expected 1 text for improve answer."
@@ -950,13 +878,13 @@ class KeywordCountingParser(parser.Parser):
 
     def parse_generate_answer(self, state: Dict, texts: List[str]) -> List[Dict]:
         """
-        Parse the response from the language model for a generate prompt.
+        解析语言模型对 generate prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the respones from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: List[Dict]
         """
 
@@ -998,26 +926,26 @@ class KeywordCountingParser(parser.Parser):
 
     def parse_validation_answer(self, state: Dict, texts: List[str]) -> bool:
         """
-        Parse the response from the language model for a validation prompt.
+        解析语言模型对 validation prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: Whether the thought state is valid or not.
+        :return: thought state 是否有效。
         :rtype: bool
         """
         pass
 
     def parse_score_answer(self, states: List[Dict], texts: List[str]) -> List[float]:
         """
-        Parse the response from the language model for a score prompt.
+        解析语言模型对 score prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The scores for the thought states.
+        :return: thought states 的分数。
         :rtype: List[float]
         """
         pass
@@ -1025,9 +953,9 @@ class KeywordCountingParser(parser.Parser):
 
 def io(all_potential_countries) -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the IO method.
+    为 IO 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -1043,9 +971,9 @@ def io(all_potential_countries) -> operations.GraphOfOperations:
 
 def cot(all_potential_countries) -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the CoT method.
+    为 CoT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -1061,10 +989,9 @@ def cot(all_potential_countries) -> operations.GraphOfOperations:
 
 def tot(all_potential_countries) -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the ToT method.
-    ToT uses a wider tree, where on each level there are more branches.
+    为 ToT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -1094,10 +1021,9 @@ def tot(all_potential_countries) -> operations.GraphOfOperations:
 
 def tot2(all_potential_countries) -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the ToT2 method.
-    ToT2 uses a tree with more levels, but with fewer branches per level.
+    为 ToT2 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -1127,13 +1053,7 @@ def tot2(all_potential_countries) -> operations.GraphOfOperations:
 
 
 def got4(all_potential_countries) -> operations.GraphOfOperations:
-    """
-    Generates the Graph of Operations for the GoT4 method, which splits the text
-    into 4 passages.
-
-    :return: Graph of Operations
-    :rtype: GraphOfOperations
-    """
+    """为 GoT4 方法生成 Graph of Operations，该方法会将文本拆成 4 段。"""
     operations_graph = operations.GraphOfOperations()
 
     sub_texts = operations.Generate(1, 1)
@@ -1191,13 +1111,7 @@ def got4(all_potential_countries) -> operations.GraphOfOperations:
 
 
 def got8(all_potential_countries) -> operations.GraphOfOperations:
-    """
-    Generates the Graph of Operations for the GoT8 method, which splits the text
-    into 8 passages.
-
-    :return: Graph of Operations
-    :rtype: GraphOfOperations
-    """
+    """为 GoT8 方法生成 Graph of Operations，该方法会将文本拆成 8 段。"""
     operations_graph = operations.GraphOfOperations()
 
     sub_texts = operations.Generate(1, 1)
@@ -1255,13 +1169,7 @@ def got8(all_potential_countries) -> operations.GraphOfOperations:
 
 
 def gotx(all_potential_countries) -> operations.GraphOfOperations:
-    """
-    Generates the Graph of Operations for the GoTx method, where each sentence
-    is considered a different passage.
-
-    :return: Graph of Operations
-    :rtype: GraphOfOperations
-    """
+    """为 GoTx 方法生成 Graph of Operations，该方法将每个句子视为不同段落。"""
     operations_graph = operations.GraphOfOperations()
 
     sub_texts = operations.Generate(1, 1)
@@ -1325,18 +1233,17 @@ def run(
     lm_name: str,
 ) -> float:
     """
-    Controller function that executes each specified method for each specified
-    sample while the budget is not exhausted.
+    Controller 函数：在预算未耗尽时，对每个指定样本执行每个指定方法。
 
-    :param data_ids: Indices of the sample to be run.
+    :param data_ids: 要运行的样本索引。
     :type data_ids: List[int]
-    :param methods: List of functions to generate Graphs of Operations.
-    :type methods: Each function generates a Graph of Operation.
-    :param budget: Language model budget for the execution in dollars.
+    :param methods: 用于生成 Graphs of Operations 的函数列表。
+    :type methods: 每个函数都会生成一个 Graph of Operation。
+    :param budget: 执行使用的语言模型预算，单位为美元。
     :type budget: float
-    :param lm_name: Name of the language model to be used.
+    :param lm_name: 要使用的语言模型名称。
     :type lm_name: str
-    :return: Spent budget in dollars.
+    :return: 已花费预算，单位为美元。
     :rtype: float
     """
 
@@ -1384,7 +1291,7 @@ def run(
     )
 
     for method in methods:
-        # create a results directory for the method
+        # 检查无效国家和形容词
         os.makedirs(os.path.join(results_folder, method.__name__))
 
     for data in selected_data:

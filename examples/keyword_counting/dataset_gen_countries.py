@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Ales Kubicek
+# 主要作者：Ales Kubicek
 
 import csv
 from typing import List, Tuple
@@ -12,16 +11,7 @@ from graph_of_thoughts import controller
 
 
 def find_country_indices(text: str, country: str) -> List[Tuple[int, str]]:
-    """
-    Finds the indices of the occurrences of a given country in the input text.
-
-    :param text: Input text.
-    :type text: str
-    :param country: Country to search for.
-    :type country: str
-    :return: List of tuples, where each tuple consists of index and country.
-    :rtype: List[Tuple[int, str]]
-    """
+    """查找指定国家在输入文本中出现位置索引的函数。"""
 
     indices = []
     index = text.find(country)
@@ -481,22 +471,22 @@ Output(y) : Passages written to a file in the CSV format.
             passage.
 """
 
-# For x batches of y responses
+# 对 x 批、每批 y 个响应进行处理
 for _ in range(num_samples):
     response = lm.query(prompt, 1)
     texts = lm.get_response_texts(response)
     for text in texts:
-        # Clean paragraphs - single long passage
+        # 检查无效国家和形容词??
         text = text.strip().replace("\n", "")
 
-        # Get all occurrences of all primary permissible countries
+        # 截断元素，直到找到最后一个输出??
         occurrences = []
         for country in [country for country in primary_countries if country in text]:
             occurrences.extend(find_country_indices(text, country))
-        # Order exactly how they appear in the text
+        # 截断元素，直到找到最后一个输出?
         ordered_occurrences = [country[1] for country in sorted(occurrences)]
 
-        # Check invalid countries and adjectives
+        # 检查无效国家和形容词
         invalid_primary_adjective = [
             adjective for adjective in primary_adjectives if adjective in text
         ]
@@ -529,7 +519,7 @@ for _ in range(num_samples):
         )
         sample_id += 1
 
-# Writing to csv file
+# ?? csv ??
 with open("countries_script.csv", "w") as csvfile:
     csvwriter = csv.writer(csvfile)
     csvwriter.writerows(result)

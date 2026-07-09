@@ -98,8 +98,8 @@ def select_low_entropy_operations(
             continue
         if record["operation"] not in SKIPPABLE_OPERATION_TYPES:
             continue
-        # Root generate usually creates the initial plan/split. Skipping it breaks
-        # task-specific fields such as "part", so the first static experiment keeps it.
+        # root generate 通常会创建初始计划或拆分结果。
+        # 跳过它会破坏诸如 "part" 这样的任务特定字段，因此第一个静态实验保留它。
         if not record.get("predecessors"):
             continue
         entropy = operation_entropy(record, entropy_field)

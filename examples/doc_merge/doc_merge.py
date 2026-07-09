@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 import os
 import re
@@ -19,10 +18,9 @@ from graph_of_thoughts import controller, language_models, operations, prompter,
 
 class DocMergePrompter(prompter.Prompter):
     """
-    DocMergePrompter provides the generation of prompts specific to the document
-    merge example for the language models.
+    DocMergePrompter 为语言模型生成文档合并示例专用的提示词。
 
-    Inherits from the Prompter class and implements its abstract methods.
+    继承 Prompter 类并实现其抽象方法。
     """
 
     merge_doc_prompt_start = """Merge the following {num} NDA documents <Doc1> - <Doc{num}> into a single NDA, maximizing retained information and minimizing redundancy. Output only the created NDA between the tags <Merged> and </Merged>, without any additional text.
@@ -123,12 +121,12 @@ NDA <S{num}>:
 
     def aggregation_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate an aggregation prompt for the language model.
+        为语言模型生成 aggregation prompt。
 
-        :param state_dicts: The thought states that should be aggregated.
+        :param state_dicts: 应该被聚合的 thought states。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The aggregation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: aggregation prompt。
         :rtype: str
         """
 
@@ -171,22 +169,13 @@ NDA <S{num}>:
         **kwargs,
     ) -> str:
         """
-        Generate a generate prompt for the language model.
+        为语言模型生成 generate prompt。
 
-        :param num_branches: The number of responses the prompt should ask the LM to generate.
+        :param num_branches: 提示词要求 LM 生成的响应数量。
         :type num_branches: int
-        :param documents: The list of documents to be merged.
-        :type documents: List[str]
-        :param method: Method for which the generate prompt is generated.
-        :type method: str
-        :param parts: Indices of the already processed document parts.
-        :type parts: Set[str]
-        :param current: The intermediate solution.
-        :type current: str
-        :param kwargs: Additional keyword arguments.
-        :return: The generate prompt.
+        :param kwargs: 额外关键字参数。
+        :return: generate prompt。
         :rtype: str
-        :raise AssertionError: If method is not implemented yet.
         """
 
         prompt = ""
@@ -244,21 +233,19 @@ NDA <S{num}>:
 
     def score_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate a score prompt for the language model.
+        为语言模型生成 score prompt。
 
-        :param state_dicts: The thought states that should be scored,
-                            if more than one, they should be scored together.
+        :param state_dicts: 应该被打分的 thought states；如果超过一个，则应该一起打分。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The score prompt.
+        :param kwargs: 额外关键字参数。
+        :return: score prompt。
         :rtype: str
-        :raise AssertionError: If more than one thought state is supplied.
         """
 
         if len(state_dicts) > 1:
             assert False, "Not implemented yet."
         else:
-            # perform individual scoring
+            # 执行逐项打分
             parts = (
                 [
                     state_dicts[0]["documents"][part]
@@ -279,20 +266,20 @@ NDA <S{num}>:
 
     def improve_prompt(self, **kwargs) -> str:
         """
-        Generate an improve prompt for the language model.
+        为语言模型生成 improve prompt。
 
-        :param kwargs: Additional keyword arguments.
-        :return: The improve prompt.
+        :param kwargs: 额外关键字参数。
+        :return: improve prompt。
         :rtype: str
         """
         pass
 
     def validation_prompt(self, **kwargs) -> str:
         """
-        Generate a validation prompt for the language model.
+        为语言模型生成 validation prompt。
 
-        :param kwargs: Additional keyword arguments.
-        :return: The validation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: validation prompt。
         :rtype: str
         """
         pass
@@ -300,29 +287,17 @@ NDA <S{num}>:
 
 class DocMergeParser(parser.Parser):
     """
-    DocMergeParser provides the parsing of language model reponses specific to the
-    document merge example.
+    DocMergeParser 解析文档合并示例中语言模型的响应。
 
-    Inherits from the Parser class and implements its abstract methods.
+    继承 Parser 类并实现其抽象方法。
     """
 
     def __init__(self) -> None:
-        """
-        Inits the response cache.
-        """
+        """初始化响应缓存。"""
         self.cache = {}
 
     def strip_answer_helper(self, text: str, tag: str = "") -> str:
-        """
-        Helper function to remove tags from a text.
-
-        :param text: The input text.
-        :type text: str
-        :param tag: The tag to be stripped. Defaults to "".
-        :type tag: str
-        :return: The stripped text.
-        :rtype: str
-        """
+        """从文本中移除标签的辅助函数。"""
 
         text = text.strip()
         if "Output:" in text:
@@ -352,20 +327,20 @@ class DocMergeParser(parser.Parser):
         self, states: List[Dict], texts: List[str]
     ) -> Union[Dict, List[Dict]]:
         """
-        Parse the response from the language model for an aggregation prompt.
+        解析语言模型对 aggregation prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the respones from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: Union[Dict, List[Dict]]
         """
 
         new_states = []
         for text in texts:
             if len(states[0]["parts"]) < len(states[0]["documents"]):
-                # subpart aggregation
+                # 子部分聚合
                 text = self.strip_answer_helper(text, "Merged")
                 new_state = states[0].copy()
                 new_state["current"] = text
@@ -375,7 +350,7 @@ class DocMergeParser(parser.Parser):
 
                 new_states.append(new_state)
             else:
-                # full NDA aggregation
+                # ?? NDA ??
                 text = self.strip_answer_helper(text, "Merged")
                 new_state = states[0].copy()
                 new_state["current"] = text
@@ -384,13 +359,13 @@ class DocMergeParser(parser.Parser):
 
     def parse_generate_answer(self, state: Dict, texts: List[str]) -> List[Dict]:
         """
-        Parse the response from the language model for a generate prompt.
+        解析语言模型对 generate prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought states after parsing the respones from the language model.
+        :return: 解析语言模型响应后得到的新 thought states。
         :rtype: List[Dict]
         """
         new_states = []
@@ -403,19 +378,18 @@ class DocMergeParser(parser.Parser):
 
     def parse_score_answer(self, states: List[Dict], texts: List[str]) -> List[float]:
         """
-        Parse the response from the language model for a score prompt.
+        解析语言模型对 score prompt 的响应。
 
-        :param states: The thought states used to generate the prompt.
+        :param states: 用于生成提示词的 thought states。
         :type states: List[Dict]
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The scores for the thought states.
+        :return: thought states 的分数。
         :rtype: List[float]
-        :raise AssertionError: If the number of thought states is not one.
         """
         assert len(states) == 1, "Only one state is allowed for scoring."
         if len(states) == 1:
-            # individual scoring
+            # 完整 NDA 聚合
             redundancy_scores = []
             retain_scores = []
             for text in texts:
@@ -457,26 +431,26 @@ class DocMergeParser(parser.Parser):
 
     def parse_improve_answer(self, state: Dict, texts: List[str]) -> Dict:
         """
-        Parse the response from the language model for an improve prompt.
+        解析语言模型对 improve prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: The new thought state after parsing the responses from the language model.
+        :return: 解析语言模型响应后得到的新 thought state。
         :rtype: Dict
         """
         pass
 
     def parse_validation_answer(self, state: Dict, texts: List[str]) -> bool:
         """
-        Parse the response from the language model for a validation prompt.
+        解析语言模型对 validation prompt 的响应。
 
-        :param state: The thought state used to generate the prompt.
+        :param state: 用于生成提示词的 thought state。
         :type state: Dict
-        :param texts: The responses to the prompt from the language model.
+        :param texts: 语言模型对提示词的响应。
         :type texts: List[str]
-        :return: Whether the thought state is valid or not.
+        :return: thought state 是否有效。
         :rtype: bool
         """
         pass
@@ -484,9 +458,9 @@ class DocMergeParser(parser.Parser):
 
 def io() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the IO method.
+    为 IO 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -499,9 +473,9 @@ def io() -> operations.GraphOfOperations:
 
 def cot() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the CoT method.
+    为 CoT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -514,9 +488,9 @@ def cot() -> operations.GraphOfOperations:
 
 def tot() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the ToT method.
+    为 ToT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -541,10 +515,9 @@ def tot() -> operations.GraphOfOperations:
 
 def got() -> operations.GraphOfOperations:
     """
-    Generates the Graph of Operations for the GoT method, where full documents
-    are merged.
+    为 GoT 方法生成 Graph of Operations。
 
-    :return: Graph of Operations
+    :return: Graph of Operations。
     :rtype: GraphOfOperations
     """
     operations_graph = operations.GraphOfOperations()
@@ -568,13 +541,7 @@ def got() -> operations.GraphOfOperations:
 
 
 def got2() -> operations.GraphOfOperations:
-    """
-    Generates the Graph of Operations for the GoT2 method, where partial
-    documents are merged.
-
-    :return: Graph of Operations
-    :rtype: GraphOfOperations
-    """
+    """为 GoT2 方法生成 Graph of Operations，该方法会合并部分文档。"""
     operations_graph = operations.GraphOfOperations()
 
     sub_parts = []
@@ -640,18 +607,17 @@ def run(
     lm_name: str,
 ) -> float:
     """
-    Controller function that executes each specified method for each specified
-    sample while the budget is not exhausted.
+    Controller 函数：在预算未耗尽时，对每个指定样本执行每个指定方法。
 
-    :param data_ids: Indices of the sample to be run.
+    :param data_ids: 要运行的样本索引。
     :type data_ids: List[int]
-    :param methods: List of functions to generate Graphs of Operations.
-    :type methods: Each function generates a Graph of Operation.
-    :param budget: Language model budget for the execution in dollars.
+    :param methods: 用于生成 Graphs of Operations 的函数列表。
+    :type methods: 每个函数都会生成一个 Graph of Operation。
+    :param budget: 执行使用的语言模型预算，单位为美元。
     :type budget: float
-    :param lm_name: Name of the language model to be used.
+    :param lm_name: 要使用的语言模型名称。
     :type lm_name: str
-    :return: Spent budget in dollars.
+    :return: 已花费预算，单位为美元。
     :rtype: float
     """
 

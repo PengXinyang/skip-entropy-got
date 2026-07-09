@@ -1,24 +1,16 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Robert Gerstenberger
+# 主要作者：Robert Gerstenberger
 
 import csv
 import numpy as np
 
 
 def scramble(array: np.ndarray, rng: np.random.Generator) -> None:
-    """
-    Helper function to change the order of the elements in an array randomly.
-
-    :param array: Array to be scrambled.
-    :type: numpy.ndarray
-    :param rng: Random number generator.
-    :type rng: numpy.random.Generator
-    """
+    """随机改变数组中元素顺序的辅助函数。"""
 
     size = array.shape[0]
 
@@ -32,21 +24,20 @@ def scramble(array: np.ndarray, rng: np.random.Generator) -> None:
 
 if __name__ == "__main__":
     """
-    Input(u)  : Set size.
-    Input(v)  : Range of the integer numbers in the sets: 0..v (exclusive)
-    Input(w)  : Seed for the random number generator.
-    Input(x)  : Number of samples to be generated.
-    Input(y)  : Filename for the output CSV file.
-    Output(z) : Input sets and intersected set written a file in the CSV format.
-                File contains the sample ID, input set 1, input set 2,
-                intersection set.
+    Input(u)  : ?????
+    Input(v)  : ???????????0..v???? v??
+    Input(w)  : ??????????
+    Input(x)  : ?????????
+    Input(y)  : ?? CSV ????
+    Output(z) : ? CSV ?????????????????
+                ?????? ID????? 1????? 2 ??????
     """
 
-    set_size = 32  # size of the generated sets
-    int_value_ubound = 64  # (exclusive) upper limit of generated numbers
-    seed = 42  # seed of the random number generator
-    num_sample = 100  # number of samples
-    filename = "set_intersection_032.csv"  # output filename
+    set_size = 32  # ???????
+    int_value_ubound = 64  # 检查无效国家和形容词???
+    seed = 42  # 将字符串转换为列表
+    num_sample = 100  # ????
+    filename = "set_intersection_032.csv"  # ?????
 
     assert 2 * set_size <= int_value_ubound
 
@@ -56,7 +47,7 @@ if __name__ == "__main__":
 
     np.set_printoptions(
         linewidth=np.inf
-    )  # no wrapping in the array fields in the output file
+    )  # 检查无效国家和形容词???
 
     with open(filename, "w") as f:
         fieldnames = ["ID", "SET1", "SET2", "INTERSECTION"]

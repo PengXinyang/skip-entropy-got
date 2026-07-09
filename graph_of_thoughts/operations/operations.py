@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main author: Nils Blach
+# 主要作者：Nils Blach
 
 from __future__ import annotations
 import logging
@@ -27,8 +26,8 @@ def _operation_response_metadata(
     prompt_role: str,
 ) -> List[Dict[str, Any]]:
     """
-    Consume model metadata for the most recent response texts and add operation
-    context. The returned list is aligned with responses when possible.
+    消费最近响应文本对应的模型元数据，并补充 operation 上下文。
+    返回的列表会尽可能与 responses 对齐。
     """
     metadata = lm.consume_last_response_metadata(len(responses))
     for index, item in enumerate(metadata):
@@ -58,9 +57,8 @@ def _metadata_for_created_thought(
     index: int,
 ) -> Dict[str, Any]:
     """
-    Choose metadata for a parsed thought. Some parsers split one response into
-    several thoughts; in that case each thought inherits the single response's
-    metadata.
+    为解析出的 thought 选择元数据。部分 parser 会把一个 response 拆成多个 thought；
+    这种情况下，每个 thought 都继承这条 response 的元数据。
     """
     # 一个 response 可能被 parser 拆成多个 Thought，例如一次 split prompt 返回多个子列表。
     # 如果只有一条 response metadata，就让拆出来的多个 Thought 共享这份观测信息。
@@ -75,7 +73,7 @@ def _metadata_for_created_thought(
 
 class OperationType(Enum):
     """
-    Enum to represent different operation types that can be used as unique identifiers.
+    表示不同 operation 类型的枚举，可作为唯一标识使用。
     """
 
     score: int = 0
@@ -91,7 +89,7 @@ class OperationType(Enum):
 
 class Operation(ABC):
     """
-    Abstract base class that defines the interface for all operations.
+    定义所有 operation 接口的抽象基类。
     """
 
     _ids: Iterator[int] = itertools.count(0)
@@ -100,7 +98,7 @@ class Operation(ABC):
 
     def __init__(self) -> None:
         """
-        Initializes a new Operation instance with a unique id, and empty predecessors and successors.
+        初始化新的 Operation 实例，并设置唯一 id、空的前驱和后继列表。
         """
         self.logger: logging.Logger = logging.getLogger(self.__class__.__name__)
         self.id: int = next(Operation._ids)
@@ -110,18 +108,18 @@ class Operation(ABC):
 
     def can_be_executed(self) -> bool:
         """
-        Checks if the operation can be executed based on its predecessors.
+        根据前驱 operation 判断当前 operation 是否可以执行。
 
-        :return: True if all predecessors have been executed, False otherwise.
+        :return: 如果所有前驱都已执行则为 True，否则为 False。
         :rtype: bool
         """
         return all(predecessor.executed for predecessor in self.predecessors)
 
     def get_previous_thoughts(self) -> List[Thought]:
         """
-        Iterates over all predecessors and aggregates their thoughts.
+        遍历所有前驱，并汇总它们的 thoughts。
 
-        :return: A list of all thoughts from the predecessors.
+        :return: 来自所有前驱的 thoughts 列表。
         :rtype: List[Thought]
         """
         previous_thoughts: List[Thought] = [
@@ -134,9 +132,9 @@ class Operation(ABC):
 
     def add_predecessor(self, operation: Operation) -> None:
         """
-        Add a preceding operation and update the relationships.
+        添加一个前驱 operation，并更新两者之间的关系。
 
-        :param operation: The operation to be set as a predecessor.
+        :param operation: 要设置为前驱的 operation。
         :type operation: Operation
         """
         self.predecessors.append(operation)
@@ -144,9 +142,9 @@ class Operation(ABC):
 
     def add_successor(self, operation: Operation) -> None:
         """
-        Add a succeeding operation and update the relationships.
+        添加一个后继 operation，并更新两者之间的关系。
 
-        :param operation: The operation to be set as a successor.
+        :param operation: 要设置为后继的 operation。
         :type operation: Operation
         """
         self.successors.append(operation)
@@ -156,16 +154,16 @@ class Operation(ABC):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Execute the operation, assuring that all predecessors have been executed.
+        执行当前 operation，并确保所有前驱都已经执行。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If not all predecessors have been executed.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果并非所有前驱都已执行。
         """
         assert self.can_be_executed(), "Not all predecessors have been executed"
         self.logger.info(
@@ -177,12 +175,11 @@ class Operation(ABC):
 
     def skip(self, skip_marker: str = "[SKIP]", **kwargs) -> None:
         """
-        Skip this operation without calling the language model, while preserving
-        the operation node and producing placeholder Thought objects for
-        downstream operations.
+        在不调用语言模型的情况下跳过当前 operation，同时保留 operation 节点，
+        并为下游 operation 生成占位 Thought 对象。
 
-        This is used by static compression experiments: the graph topology is
-        unchanged, but selected LLM-generation nodes are replaced by [SKIP].
+        该方法用于静态压缩实验：图拓扑保持不变，但选中的 LLM 生成节点
+        会被替换为 [SKIP]。
         """
         assert self.can_be_executed(), "Not all predecessors have been executed"
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
@@ -226,26 +223,26 @@ class Operation(ABC):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Abstract method for the actual execution of the operation.
-        This should be implemented in derived classes.
+        实际执行 operation 的抽象方法。
+        该方法应由派生类实现。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
+        :param kwargs: 执行时使用的额外参数。
         """
         pass
 
     @abstractmethod
     def get_thoughts(self) -> List[Thought]:
         """
-        Abstract method to retrieve the thoughts associated with the operation.
-        This should be implemented in derived classes.
+        获取与当前 operation 关联的 thoughts 的抽象方法。
+        该方法应由派生类实现。
 
-        :return: List of associated thoughts.
+        :return: 关联的 thoughts 列表。
         :rtype: List[Thought]
         """
         pass
@@ -253,7 +250,7 @@ class Operation(ABC):
 
 class Score(Operation):
     """
-    Operation to score thoughts.
+    用于给 thoughts 打分的 operation。
     """
 
     operation_type: OperationType = OperationType.score
@@ -267,15 +264,15 @@ class Score(Operation):
         ] = None,
     ) -> None:
         """
-        Initializes a new Score operation.
+        初始化新的 Score operation。
 
-        :param num_samples: Number of samples to use for scoring. Defaults to 1.
+        :param num_samples: 打分时使用的样本数量。默认为 1。
         :type num_samples: int
-        :param combined_scoring: Whether to score all thoughts together or individually. Defaults to False.
+        :param combined_scoring: 是否将所有 thoughts 一起打分，而不是逐个打分。默认为 False。
         :type combined_scoring: bool
-        :param scoring_function: A function to score thoughts (if not using LM). Defaults to None.
-        :type scoring_function: Takes a list of thought states or a single thought state and
-                                returns a list of scores or a single score.
+        :param scoring_function: 不使用 LM 时用于给 thoughts 打分的函数。默认为 None。
+        :type scoring_function: 接收 thought state 列表或单个 thought state，
+                                并返回分数列表或单个分数。
         """
         super().__init__()
         self.num_samples: int = num_samples
@@ -287,9 +284,9 @@ class Score(Operation):
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts associated with the operation.
+        返回与当前 operation 关联的 thoughts。
 
-        :return: List of scored thoughts.
+        :return: 已打分的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -298,18 +295,18 @@ class Score(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the scoring operation by scoring the thoughts from the predecessors.
-        If combined scoring is used, the thoughts are scored together, otherwise individually.
-        If a scoring function is provided, it is used, otherwise the LM is prompted.
+        通过给前驱中的 thoughts 打分来执行 scoring operation。
+        如果启用 combined scoring，则将所有 thoughts 一起打分，否则逐个打分。
+        如果提供了 scoring function，则使用该函数；否则向 LM 发送提示。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If operation has no predecessors.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果 operation 没有前驱。
         """
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
 
@@ -382,7 +379,7 @@ class Score(Operation):
 
 class ValidateAndImprove(Operation):
     """
-    Operation to validate and improve thoughts.
+    用于验证并改进 thoughts 的 operation。
     """
 
     operation_type: OperationType = OperationType.validate_and_improve
@@ -395,16 +392,16 @@ class ValidateAndImprove(Operation):
         validate_function: Callable[[Dict], bool] = None,
     ) -> None:
         """
-        Initializes a new ValidateAndImprove operation.
+        初始化新的 ValidateAndImprove operation。
 
-        :param num_samples: Number of samples to use for validation. Defaults to 1.
+        :param num_samples: 验证时使用的样本数量。默认为 1。
         :type num_samples: int
-        :param improve: Whether to improve the thought if it is not valid. Defaults to True.
+        :param improve: 当 thought 无效时是否进行改进。默认为 True。
         :type improve: bool
-        :param num_tries: Number of tries to improve the thought before giving up. Defaults to 3.
+        :param num_tries: 放弃前尝试改进 thought 的次数。默认为 3。
         :type num_tries: int
-        :param validate_function: A function to validate thoughts (if not using LM). Defaults to None.
-        :type validate_function: Takes a thought state and returns a boolean.
+        :param validate_function: 不使用 LM 时用于验证 thoughts 的函数。默认为 None。
+        :type validate_function: 接收 thought state 并返回布尔值。
         """
         super().__init__()
         self.num_samples: int = num_samples
@@ -415,9 +412,9 @@ class ValidateAndImprove(Operation):
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the list of final thoughts, after validation and improvement.
+        返回经过验证和改进后的最终 thoughts 列表。
 
-        :return: List of final validated and improved thoughts.
+        :return: 最终验证并改进后的 thoughts 列表。
         :rtype: List[Thought]
         """
         return [thought_list[-1] for thought_list in self.thoughts]
@@ -426,18 +423,18 @@ class ValidateAndImprove(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the ValidateAndImprove operation by validating and improving the predecessors' thoughts.
-        If a validation function is provided, it is used, otherwise the LM is prompted.
-        If improvement is enabled, the LM is prompted to improve the thought, if it is not valid.
+        通过验证并改进前驱中的 thoughts 来执行 ValidateAndImprove operation。
+        如果提供了 validation function，则使用该函数；否则向 LM 发送提示。
+        如果启用了改进，并且 thought 无效，则向 LM 发送提示以改进该 thought。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If operation has no predecessors.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果 operation 没有前驱。
         """
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
 
@@ -516,7 +513,7 @@ class ValidateAndImprove(Operation):
 
 class Generate(Operation):
     """
-    Operation to generate thoughts.
+    用于生成 thoughts 的 operation。
     """
 
     operation_type: OperationType = OperationType.generate
@@ -525,11 +522,11 @@ class Generate(Operation):
         self, num_branches_prompt: int = 1, num_branches_response: int = 1
     ) -> None:
         """
-        Initializes a new Generate operation.
+        初始化新的 Generate operation。
 
-        :param num_branches_prompt: Number of responses that each prompt should generate (passed to prompter). Defaults to 1.
+        :param num_branches_prompt: 每个提示词应生成的响应数量，会传给 prompter。默认为 1。
         :type num_branches_prompt: int
-        :param num_branches_response: Number of responses the LM should generate for each prompt. Defaults to 1.
+        :param num_branches_response: LM 应为每个提示词生成的响应数量。默认为 1。
         :type num_branches_response: int
         """
         super().__init__()
@@ -539,9 +536,9 @@ class Generate(Operation):
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts associated with the operation.
+        返回与当前 operation 关联的 thoughts。
 
-        :return: List of generated thoughts.
+        :return: 生成的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -550,17 +547,17 @@ class Generate(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the Generate operation by generating thoughts from the predecessors.
-        The thoughts are generated by prompting the LM with the predecessors' thought states.
-        If there are no predecessors, the kwargs are used as a base state.
+        通过基于前驱生成 thoughts 来执行 Generate operation。
+        该方法使用前驱的 thought states 向 LM 发送提示来生成 thoughts。
+        如果没有前驱，则使用 kwargs 作为基础 state。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
+        :param kwargs: 执行时使用的额外参数。
         """
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
 
@@ -568,7 +565,7 @@ class Generate(Operation):
             return
 
         if len(previous_thoughts) == 0:
-            # no predecessors, use kwargs as base state
+            # 没有前驱时，使用 kwargs 作为基础 state。
             previous_thoughts = [Thought(state=kwargs)]
 
         for thought in previous_thoughts:
@@ -617,23 +614,23 @@ class Generate(Operation):
 
 class Improve(Operation):
     """
-    Operation to improve thoughts.
+    用于改进 thoughts 的 operation。
     """
 
     operation_type: OperationType = OperationType.improve
 
     def __init__(self) -> None:
         """
-        Initializes a new Improve operation.
+        初始化新的 Improve operation。
         """
         super().__init__()
         self.thoughts: List[Thought] = []
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts associated with the operation after improvement.
+        返回当前 operation 改进后的 thoughts。
 
-        :return: List of improved thoughts.
+        :return: 改进后的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -642,17 +639,17 @@ class Improve(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the Improve operation by improving the predecessors' thoughts.
-        The thoughts are improved by prompting the LM with the predecessors' thought states.
+        通过改进前驱中的 thoughts 来执行 Improve operation。
+        该方法使用前驱的 thought states 向 LM 发送提示来改进 thoughts。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If operation has no predecessors.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果 operation 没有前驱。
         """
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
 
@@ -681,16 +678,16 @@ class Improve(Operation):
 
 class Aggregate(Operation):
     """
-    Operation to aggregate thoughts.
+    用于聚合 thoughts 的 operation。
     """
 
     operation_type: OperationType = OperationType.aggregate
 
     def __init__(self, num_responses: int = 1) -> None:
         """
-        Initializes a new Aggregate operation.
+        初始化新的 Aggregate operation。
 
-        :param num_responses: Number of responses to use for aggregation. Defaults to 1.
+        :param num_responses: 聚合时使用的响应数量。默认为 1。
         :type num_responses: int
         """
         super().__init__()
@@ -699,9 +696,9 @@ class Aggregate(Operation):
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts associated with the operation after aggregation.
+        返回当前 operation 聚合后的 thoughts。
 
-        :return: List of aggregated thoughts.
+        :return: 聚合后的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -710,17 +707,17 @@ class Aggregate(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the Aggregate operation by aggregating the predecessors' thoughts.
-        The thoughts are aggregated by prompting the LM with the predecessors' thought states.
+        通过聚合前驱中的 thoughts 来执行 Aggregate operation。
+        该方法使用前驱的 thought states 向 LM 发送提示来聚合 thoughts。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If operation has no predecessors.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果 operation 没有前驱。
         """
         assert (
             len(self.predecessors) >= 1
@@ -731,7 +728,7 @@ class Aggregate(Operation):
         if len(previous_thoughts) == 0:
             return
 
-        # applied in order of score
+        # 按 score 顺序应用。
         base_state: Dict = {}
         for thought in sorted(previous_thoughts, key=lambda thought: thought.score):
             base_state = {**base_state, **thought.state}
@@ -764,9 +761,8 @@ class Aggregate(Operation):
 
     def skip(self, skip_marker: str = "[SKIP]", **kwargs) -> None:
         """
-        Skip aggregation without calling the language model. The placeholder
-        keeps the merged upstream state so downstream operations still see a
-        structurally valid graph node.
+        在不调用语言模型的情况下跳过聚合。占位结果会保留合并后的上游 state，
+        使下游 operation 仍能看到结构有效的图节点。
         """
         assert self.can_be_executed(), "Not all predecessors have been executed"
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
@@ -807,20 +803,20 @@ class Aggregate(Operation):
 
 class KeepBestN(Operation):
     """
-    Operation to keep the best N thoughts from predecessors based on their score.
+    根据 score 从前驱中保留最好的 N 个 thoughts 的 operation。
     """
 
     operation_type: OperationType = OperationType.keep_best_n
 
     def __init__(self, n: int, higher_is_better: bool = True) -> None:
         """
-        Initializes a new KeepBestN operation.
+        初始化新的 KeepBestN operation。
 
-        :param n: Maximum number of thoughts to keep.
+        :param n: 要保留的最大 thoughts 数量。
         :type n: int
-        :param higher_is_better: Whether higher scores are better. Defaults to True.
+        :param higher_is_better: 分数越高是否越好。默认为 True。
         :type higher_is_better: bool
-        :raises AssertionError: If `n` is not greater than zero.
+        :raises AssertionError: 如果 `n` 不大于零。
         """
         super().__init__()
         self.n: int = n
@@ -830,12 +826,12 @@ class KeepBestN(Operation):
 
     def get_best_n(self) -> List[Thought]:
         """
-        Returns the best N thoughts from the predecessors based on their score.
+        根据 score 返回前驱中最好的 N 个 thoughts。
 
-        :return: List of best N thoughts.
+        :return: 最好的 N 个 thoughts 列表。
         :rtype: List[Thought]
-        :raises AssertionError: If not all predecessors have been executed.
-        :raises AssertionError: If not all thoughts have been scored.
+        :raises AssertionError: 如果并非所有前驱都已执行。
+        :raises AssertionError: 如果并非所有 thoughts 都已打分。
         """
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
         assert all(
@@ -865,9 +861,9 @@ class KeepBestN(Operation):
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts kept by the operation.
+        返回当前 operation 保留的 thoughts。
 
-        :return: List of kept thoughts.
+        :return: 保留的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -876,18 +872,18 @@ class KeepBestN(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the KeepBestN operation by keeping the best N thoughts from the predecessors according to their score.
+        通过根据 score 从前驱中保留最好的 N 个 thoughts 来执行 KeepBestN operation。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If operation has no predecessors.
-        :raises AssertionError: If not all predecessors have been executed.
-        :raises AssertionError: If not all thoughts have been scored.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果 operation 没有前驱。
+        :raises AssertionError: 如果并非所有前驱都已执行。
+        :raises AssertionError: 如果并非所有 thoughts 都已打分。
         """
         assert (
             len(self.predecessors) >= 1
@@ -907,23 +903,23 @@ class KeepBestN(Operation):
 
 class KeepValid(Operation):
     """
-    Operation to keep valid thoughts from predecessors.
+    用于从前驱中保留有效 thoughts 的 operation。
     """
 
     operation_type: OperationType = OperationType.keep_valid
 
     def __init__(self) -> None:
         """
-        Initializes a new KeepValid operation.
+        初始化新的 KeepValid operation。
         """
         super().__init__()
         self.thoughts: List[Thought] = []
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts kept by the operation.
+        返回当前 operation 保留的 thoughts。
 
-        :return: List of kept thoughts.
+        :return: 保留的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -932,17 +928,17 @@ class KeepValid(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the KeepValid operation by keeping the valid thoughts from the predecessors.
-        Keeps unvalidated thoughts as well.
+        通过保留前驱中的有效 thoughts 来执行 KeepValid operation。
+        未验证的 thoughts 也会被保留。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If operation has no predecessors.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果 operation 没有前驱。
         """
         assert (
             len(self.predecessors) >= 1
@@ -971,17 +967,17 @@ class KeepValid(Operation):
 
 class GroundTruth(Operation):
     """
-    Operation to evaluate if thoughts correctly solve the problem, using a ground truth evaluator
+    使用 ground truth evaluator 判断 thoughts 是否正确解决问题的 operation。
     """
 
     operation_type: OperationType = OperationType.ground_truth_evaluator
 
     def __init__(self, ground_truth_evaluator: Callable[[Dict], bool]) -> None:
         """
-        Initializes a new GroundTruth operation.
+        初始化新的 GroundTruth operation。
 
-        :param ground_truth_evaluator: A function to evaluate if a thought solves the problem.
-        :type ground_truth_evaluator: A function that takes a thought state and returns a boolean.
+        :param ground_truth_evaluator: 用于判断 thought 是否解决问题的函数。
+        :type ground_truth_evaluator: 接收 thought state 并返回布尔值的函数。
         """
         super().__init__()
         self.ground_truth_evaluator: Callable[[Dict], bool] = ground_truth_evaluator
@@ -989,9 +985,9 @@ class GroundTruth(Operation):
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts associated with the operation.
+        返回与当前 operation 关联的 thoughts。
 
-        :return: List of evaluated thoughts.
+        :return: 已评估的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -1000,16 +996,16 @@ class GroundTruth(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the GroundTruth operation by evaluating the predecessors' thoughts using the ground truth evaluator function.
+        通过使用 ground truth evaluator 函数评估前驱中的 thoughts 来执行 GroundTruth operation。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
-        :raises AssertionError: If operation has no predecessor.
+        :param kwargs: 执行时使用的额外参数。
+        :raises AssertionError: 如果 operation 没有前驱。
         """
         assert (
             len(self.predecessors) >= 1
@@ -1035,18 +1031,18 @@ class GroundTruth(Operation):
 
 class Selector(Operation):
     """
-    Operation to select thoughts from predecessors.
-    Useful for separating thoughts to perform different, subsequent operations on them.
+    用于从前驱中选择 thoughts 的 operation。
+    适用于拆分 thoughts，以便对它们执行不同的后续 operation。
     """
 
     operation_type: OperationType = OperationType.selector
 
     def __init__(self, selector: Callable[[List[Thought]], List[Thought]]) -> None:
         """
-        Initializes a new Selector operation.
+        初始化新的 Selector operation。
 
-        :param selector: A function to select thoughts from the predecessors' thoughts.
-        :type selector: A function that takes a list of thoughts and returns a list of thoughts.
+        :param selector: 用于从前驱 thoughts 中选择 thoughts 的函数。
+        :type selector: 接收 thoughts 列表并返回 thoughts 列表的函数。
         """
         super().__init__()
         self.selector: Callable[[List[Thought]], List[Thought]] = selector
@@ -1054,9 +1050,9 @@ class Selector(Operation):
 
     def get_thoughts(self) -> List[Thought]:
         """
-        Returns the thoughts selected by the operation.
+        返回当前 operation 选择的 thoughts。
 
-        :return: List of selected thoughts.
+        :return: 选中的 thoughts 列表。
         :rtype: List[Thought]
         """
         return self.thoughts
@@ -1065,16 +1061,16 @@ class Selector(Operation):
         self, lm: AbstractLanguageModel, prompter: Prompter, parser: Parser, **kwargs
     ) -> None:
         """
-        Executes the Selector operation by selecting thoughts from the predecessors using the selector function.
-        If the Selector has no predecessors, the selector function is called with a thought containing the kwargs as state.
+        通过使用 selector 函数从前驱中选择 thoughts 来执行 Selector operation。
+        如果 Selector 没有前驱，则使用一个以 kwargs 作为 state 的 thought 调用 selector 函数。
 
-        :param lm: The language model to be used.
+        :param lm: 要使用的语言模型。
         :type lm: AbstractLanguageModel
-        :param prompter: The prompter for crafting prompts.
+        :param prompter: 用于构造提示词的 prompter。
         :type prompter: Prompter
-        :param parser: The parser for parsing responses.
+        :param parser: 用于解析响应的 parser。
         :type parser: Parser
-        :param kwargs: Additional parameters for execution.
+        :param kwargs: 执行时使用的额外参数。
         """
         previous_thoughts: List[Thought] = self.get_previous_thoughts()
 

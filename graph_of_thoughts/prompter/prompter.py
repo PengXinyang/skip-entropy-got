@@ -1,10 +1,9 @@
-# Copyright (c) 2023 ETH Zurich.
-#                    All rights reserved.
+# 版权所有 (c) 2023 ETH Zurich。
+#                    保留所有权利。
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
+# 本源代码的使用受 BSD 风格许可证约束，具体内容可在 LICENSE 文件中找到。
 #
-# main authors: Robert Gerstenberger, Nils Blach
+# 主要作者：Robert Gerstenberger, Nils Blach
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
@@ -13,19 +12,19 @@ from typing import Dict, List
 
 class Prompter(ABC):
     """
-    Abstract base class that defines the interface for all prompters.
-    Prompters are used to generate the prompts for the language models.
+    定义所有 prompter 接口的抽象基类。
+    Prompter 用于为语言模型生成提示词。
     """
 
     @abstractmethod
     def aggregation_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate a aggregation prompt for the language model.
+        为语言模型生成 aggregation prompt。
 
-        :param state_dicts: The thought states that should be aggregated.
+        :param state_dicts: 应该被聚合的 thought states。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The aggregation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: aggregation prompt。
         :rtype: str
         """
         pass
@@ -33,12 +32,12 @@ class Prompter(ABC):
     @abstractmethod
     def improve_prompt(self, **kwargs) -> str:
         """
-        Generate an improve prompt for the language model.
-        The thought state is unpacked to allow for additional keyword arguments
-        and concrete implementations to specify required arguments explicitly.
+        为语言模型生成 improve prompt。
+        thought state 会被展开，以允许额外关键字参数，
+        并允许具体实现显式声明所需参数。
 
-        :param kwargs: Additional keyword arguments.
-        :return: The improve prompt.
+        :param kwargs: 额外关键字参数。
+        :return: improve prompt。
         :rtype: str
         """
         pass
@@ -46,14 +45,14 @@ class Prompter(ABC):
     @abstractmethod
     def generate_prompt(self, num_branches: int, **kwargs) -> str:
         """
-        Generate a generate prompt for the language model.
-        The thought state is unpacked to allow for additional keyword arguments
-        and concrete implementations to specify required arguments explicitly.
+        为语言模型生成 generate prompt。
+        thought state 会被展开，以允许额外关键字参数，
+        并允许具体实现显式声明所需参数。
 
-        :param num_branches: The number of responses the prompt should ask the LM to generate.
+        :param num_branches: 提示词要求 LM 生成的响应数量。
         :type num_branches: int
-        :param kwargs: Additional keyword arguments.
-        :return: The generate prompt.
+        :param kwargs: 额外关键字参数。
+        :return: generate prompt。
         :rtype: str
         """
         pass
@@ -61,12 +60,12 @@ class Prompter(ABC):
     @abstractmethod
     def validation_prompt(self, **kwargs) -> str:
         """
-        Generate a validation prompt for the language model.
-        The thought state is unpacked to allow for additional keyword arguments
-        and concrete implementations to specify required arguments explicitly.
+        为语言模型生成 validation prompt。
+        thought state 会被展开，以允许额外关键字参数，
+        并允许具体实现显式声明所需参数。
 
-        :param kwargs: Additional keyword arguments.
-        :return: The validation prompt.
+        :param kwargs: 额外关键字参数。
+        :return: validation prompt。
         :rtype: str
         """
         pass
@@ -74,13 +73,13 @@ class Prompter(ABC):
     @abstractmethod
     def score_prompt(self, state_dicts: List[Dict], **kwargs) -> str:
         """
-        Generate a score prompt for the language model.
+        为语言模型生成 score prompt。
 
-        :param state_dicts: The thought states that should be scored,
-                            if more than one, they should be scored together.
+        :param state_dicts: 应该被打分的 thought states；
+                            如果超过一个，则应该一起打分。
         :type state_dicts: List[Dict]
-        :param kwargs: Additional keyword arguments.
-        :return: The score prompt.
+        :param kwargs: 额外关键字参数。
+        :return: score prompt。
         :rtype: str
         """
         pass
