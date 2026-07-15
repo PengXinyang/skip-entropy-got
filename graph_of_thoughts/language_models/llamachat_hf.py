@@ -7,6 +7,7 @@
 
 import os
 import torch
+import time
 from typing import List, Dict, Union
 from .abstract_language_model import AbstractLanguageModel
 
@@ -88,6 +89,7 @@ class Llama2HF(AbstractLanguageModel):
         sequences = []
         query = f"<s><<SYS>>You are a helpful assistant. Always follow the intstructions precisely and output the response exactly in the requested format.<</SYS>>\n\n[INST] {query} [/INST]"
         for _ in range(num_responses):
+            start_time = time.perf_counter()
             sequences.extend(
                 self.generate_text(
                     query,
@@ -98,6 +100,7 @@ class Llama2HF(AbstractLanguageModel):
                     max_length=self.max_tokens,
                 )
             )
+            self._record_model_call(time.perf_counter() - start_time)
         response = [
             {"generated_text": sequence["generated_text"][len(query) :].strip()}
             for sequence in sequences

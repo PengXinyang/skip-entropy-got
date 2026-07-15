@@ -58,6 +58,10 @@ class GCLIGemini(AbstractLanguageModel):
         self.collect_logprobs: bool = bool(self.config.get("collect_logprobs", False))
         # top_logprobs: 每个生成位置返回概率最高的 k 个候选 token，用于近似熵。
         self.top_logprobs: int = int(self.config.get("top_logprobs", 5))
+        # top_logprobs_normalized_mass: 可选归一化口径，例如 0.99。
+        self.top_logprobs_normalized_mass: float = float(
+            self.config.get("top_logprobs_normalized_mass", 0.0) or 0.0
+        )
 
         # GCLI 代理相关配置
         # 优先使用环境变量，否则使用 config.json 中的 api_key / base_url
@@ -177,6 +181,7 @@ class GCLIGemini(AbstractLanguageModel):
 
             self._calculate_cost()
         setattr(response, "_got_latency_seconds", latency)
+        self._record_model_call(latency)
 
         self.logger.info(
             f"GCLIGemini 响应: {response}"

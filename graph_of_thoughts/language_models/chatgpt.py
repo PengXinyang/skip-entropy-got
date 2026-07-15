@@ -55,6 +55,11 @@ class ChatGPT(AbstractLanguageModel):
         # top_logprobs: 每个生成位置返回概率最高的几个候选 token。
         # 例如 5 表示返回 top-5 候选，用这些候选概率近似计算 token entropy。
         self.top_logprobs: int = int(self.config.get("top_logprobs", 5))
+        # top_logprobs_normalized_mass: 可选归一化口径。
+        # 例如设为 0.99，表示把 API 返回的 top-k 候选概率重标定为覆盖 0.99 概率质量。
+        self.top_logprobs_normalized_mass: float = float(
+            self.config.get("top_logprobs_normalized_mass", 0.0) or 0.0
+        )
         # account organization 是 chatgpt 使用的组织。
         self.organization: str = self.config["organization"]
         if self.organization == "":
@@ -152,6 +157,7 @@ class ChatGPT(AbstractLanguageModel):
         self.completion_tokens += response.usage.completion_tokens
         self._calculate_cost()
         setattr(response, "_got_latency_seconds", latency)
+        self._record_model_call(latency)
         self.logger.info(
             f"This is the response from chatgpt: {response}"
             f"\nThis is the cost of the response: {self.cost}"

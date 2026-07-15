@@ -135,7 +135,13 @@ def token_summary(graph_json: List[Dict[str, Any]]) -> Dict[str, float]:
     return {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
-        "total_tokens": prompt_tokens + completion_tokens,
+        "total_tokens": float(
+            totals.get("total_tokens", prompt_tokens + completion_tokens) or 0
+        ),
+        "api_calls": float(totals.get("api_calls", 0) or 0),
+        "total_latency_seconds": float(
+            totals.get("total_latency_seconds", 0.0) or 0.0
+        ),
         "cost": float(totals.get("cost", 0.0) or 0.0),
     }
 
@@ -236,6 +242,13 @@ def main() -> None:
             ),
             "cost_reduction": reduction_ratio(
                 full_tokens["cost"], compressed_tokens["cost"]
+            ),
+            "api_call_reduction": reduction_ratio(
+                full_tokens["api_calls"], compressed_tokens["api_calls"]
+            ),
+            "latency_reduction": reduction_ratio(
+                full_tokens["total_latency_seconds"],
+                compressed_tokens["total_latency_seconds"],
             ),
             "operation_skip_ratio": (
                 len(skip_indices) / len(ranked_candidates)

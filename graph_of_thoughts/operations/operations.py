@@ -8,7 +8,7 @@
 from __future__ import annotations
 import logging
 from enum import Enum
-from typing import List, Iterator, Dict, Callable, Union, Any
+from typing import List, Iterator, Dict, Callable, Union, Any, Tuple
 from abc import ABC, abstractmethod
 import itertools
 
@@ -69,6 +69,56 @@ def _metadata_for_created_thought(
     if index < len(response_metadata):
         return dict(response_metadata[index])
     return dict(response_metadata[-1])
+
+
+def _force_single_response_calls(lm: AbstractLanguageModel) -> bool:
+    """
+    判断是否把一次 num_responses=N 的请求拆成 N 次 num_responses=1。
+
+    该开关用于新的实验口径：统一“一个候选 thought/response 一次模型调用”，
+    避免 GPT 的 n=N 调用和 DeepSeek/Gemini 的多次 n=1 调用在调用次数上不可比。
+    """
+    config = getattr(lm, "config", {}) or {}
+    return bool(config.get("force_single_response_calls", False))
+
+
+def _query_lm_with_metadata(
+    lm: AbstractLanguageModel,
+    prompt: str,
+    num_responses: int,
+    operation: "Operation",
+    prompt_role: str,
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """
+    查询语言模型并返回与 responses 对齐的 metadata。
+
+    默认保持原行为：一次请求传入 num_responses。
+    当 force_single_response_calls=true 时，将其拆成多次 num_responses=1，
+    从而让调用次数与候选 thought/response 数量一致。
+    """
+    if num_responses <= 1 or not _force_single_response_calls(lm):
+        responses = lm.get_response_texts(lm.query(prompt, num_responses=num_responses))
+        return responses, _operation_response_metadata(
+            lm, responses, prompt, operation, prompt_role
+        )
+
+    all_responses: List[str] = []
+    all_metadata: List[Dict[str, Any]] = []
+    for response_index in range(num_responses):
+        responses = lm.get_response_texts(lm.query(prompt, num_responses=1))
+        response_metadata = _operation_response_metadata(
+            lm, responses, prompt, operation, prompt_role
+        )
+        for item in response_metadata:
+            # response_call_index: 拆分调用后的第几次请求，便于统计和排查。
+            item["response_call_index"] = response_index
+            # requested_num_responses: 原本希望从该 prompt 生成多少个候选。
+            item["requested_num_responses"] = num_responses
+            # force_single_response_calls: 标记本次 metadata 来自拆分调用模式。
+            item["force_single_response_calls"] = True
+        all_responses.extend(responses)
+        all_metadata.extend(response_metadata)
+    return all_responses, all_metadata
 
 
 class OperationType(Enum):
@@ -325,11 +375,8 @@ class Score(Operation):
                 prompt = prompter.score_prompt(previous_thoughts_states)
                 self.logger.debug("Prompt for LM: %s", prompt)
 
-                responses = lm.get_response_texts(
-                    lm.query(prompt, num_responses=self.num_samples)
-                )
-                score_metadata = _operation_response_metadata(
-                    lm, responses, prompt, self, "score"
+                responses, score_metadata = _query_lm_with_metadata(
+                    lm, prompt, self.num_samples, self, "score"
                 )
                 self.logger.debug("Responses from LM: %s", responses)
                 scores = parser.parse_score_answer(previous_thoughts_states, responses)
@@ -354,11 +401,8 @@ class Score(Operation):
                     prompt = prompter.score_prompt([thought.state])
                     self.logger.debug("Prompt for LM: %s", prompt)
 
-                    responses = lm.get_response_texts(
-                        lm.query(prompt, num_responses=self.num_samples)
-                    )
-                    score_metadata = _operation_response_metadata(
-                        lm, responses, prompt, self, "score"
+                    responses, score_metadata = _query_lm_with_metadata(
+                        lm, prompt, self.num_samples, self, "score"
                     )
                     self.logger.debug("Responses from LM: %s", responses)
                     score = parser.parse_score_answer([thought.state], responses)[0]
@@ -456,11 +500,8 @@ class ValidateAndImprove(Operation):
                 else:
                     prompt = prompter.validation_prompt(**current_thought.state)
                     self.logger.debug("Prompt for LM: %s", prompt)
-                    responses = lm.get_response_texts(
-                        lm.query(prompt, num_responses=self.num_samples)
-                    )
-                    validation_metadata = _operation_response_metadata(
-                        lm, responses, prompt, self, "validation"
+                    responses, validation_metadata = _query_lm_with_metadata(
+                        lm, prompt, self.num_samples, self, "validation"
                     )
                     self.logger.debug("Responses from LM: %s", responses)
 
@@ -480,11 +521,8 @@ class ValidateAndImprove(Operation):
                     break
                 improve_prompt = prompter.improve_prompt(**current_thought.state)
                 self.logger.debug("Prompt for LM: %s", improve_prompt)
-                responses = lm.get_response_texts(
-                    lm.query(improve_prompt, num_responses=1)
-                )
-                improve_metadata = _operation_response_metadata(
-                    lm, responses, improve_prompt, self, "improve"
+                responses, improve_metadata = _query_lm_with_metadata(
+                    lm, improve_prompt, 1, self, "improve"
                 )
                 self.logger.debug("Responses from LM: %s", responses)
                 state_update = parser.parse_improve_answer(
@@ -572,11 +610,8 @@ class Generate(Operation):
             base_state = thought.state
             prompt = prompter.generate_prompt(self.num_branches_prompt, **base_state)
             self.logger.debug("Prompt for LM: %s", prompt)
-            responses = lm.get_response_texts(
-                lm.query(prompt, num_responses=self.num_branches_response)
-            )
-            response_metadata = _operation_response_metadata(
-                lm, responses, prompt, self, "generate"
+            responses, response_metadata = _query_lm_with_metadata(
+                lm, prompt, self.num_branches_response, self, "generate"
             )
             self.logger.debug("Responses from LM: %s", responses)
             for index, new_state in enumerate(
@@ -658,9 +693,8 @@ class Improve(Operation):
         for thought in previous_thoughts:
             improve_prompt = prompter.improve_prompt(**thought.state)
             self.logger.debug("Prompt for LM: %s", improve_prompt)
-            responses = lm.get_response_texts(lm.query(improve_prompt, num_responses=1))
-            improve_metadata = _operation_response_metadata(
-                lm, responses, improve_prompt, self, "improve"
+            responses, improve_metadata = _query_lm_with_metadata(
+                lm, improve_prompt, 1, self, "improve"
             )
             self.logger.debug("Responses from LM: %s", responses)
             state_update = parser.parse_improve_answer(thought.state, responses)
@@ -738,11 +772,8 @@ class Aggregate(Operation):
 
         self.logger.debug("Prompt for LM: %s", prompt)
 
-        responses = lm.get_response_texts(
-            lm.query(prompt, num_responses=self.num_responses)
-        )
-        response_metadata = _operation_response_metadata(
-            lm, responses, prompt, self, "aggregate"
+        responses, response_metadata = _query_lm_with_metadata(
+            lm, prompt, self.num_responses, self, "aggregate"
         )
 
         self.logger.debug("Responses from LM: %s", responses)

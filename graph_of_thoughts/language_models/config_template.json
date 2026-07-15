@@ -6,6 +6,10 @@
         "temperature": 1.0,
         "max_tokens": 1536,
         "stop": null,
+        "collect_logprobs": false,
+        "top_logprobs": 20,
+        "top_logprobs_normalized_mass": 0.99,
+        "force_single_response_calls": true,
         "organization": "",
         "api_key": ""
     },
@@ -16,6 +20,10 @@
         "temperature": 1.0,
         "max_tokens": 4096,
         "stop": null,
+        "collect_logprobs": false,
+        "top_logprobs": 20,
+        "top_logprobs_normalized_mass": 0.99,
+        "force_single_response_calls": true,
         "organization": "",
         "api_key": ""
     },
@@ -45,5 +53,20 @@
         "temperature": 0.6,
         "top_k": 10,
         "max_tokens": 4096
+    },
+    "deepseek-32b-hf" : {
+        "model_id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+        "cache_dir": "",
+        "prompt_token_cost": 0.0,
+        "response_token_cost": 0.0,
+        "temperature": 1.0,
+        "top_p": 1.0,
+        "top_k": 0,
+        "do_sample": true,
+        "max_new_tokens": 2048,
+        "torch_dtype": "bfloat16",
+        "device_map": "auto",
+        "load_in_4bit": true,
+        "force_single_response_calls": true
     }
 }

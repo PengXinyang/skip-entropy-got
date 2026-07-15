@@ -181,6 +181,11 @@ class Controller:
             {
                 "prompt_tokens": self.lm.prompt_tokens,
                 "completion_tokens": self.lm.completion_tokens,
+                "total_tokens": self.lm.prompt_tokens + self.lm.completion_tokens,
+                "api_calls": getattr(self.lm, "api_calls", None),
+                "total_latency_seconds": getattr(
+                    self.lm, "total_latency_seconds", None
+                ),
                 "cost": self.lm.cost,
             }
         )

@@ -59,6 +59,10 @@ class DeepSeek(AbstractLanguageModel):
         self.collect_logprobs: bool = bool(self.config.get("collect_logprobs", False))
         # top_logprobs: 每个生成位置返回概率最高的 k 个候选 token，用于近似熵。
         self.top_logprobs: int = int(self.config.get("top_logprobs", 5))
+        # top_logprobs_normalized_mass: 可选归一化口径，例如 0.99。
+        self.top_logprobs_normalized_mass: float = float(
+            self.config.get("top_logprobs_normalized_mass", 0.0) or 0.0
+        )
 
         # 思考模式相关配置（全部可选，默认关闭）
         # - thinking_enabled: 是否启用思考模式
@@ -199,6 +203,7 @@ class DeepSeek(AbstractLanguageModel):
         self.completion_tokens += response.usage.completion_tokens
         self._calculate_cost()
         setattr(response, "_got_latency_seconds", latency)
+        self._record_model_call(latency)
 
         self.logger.info(
             f"DeepSeek 响应: {response}"

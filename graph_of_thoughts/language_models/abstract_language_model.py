@@ -42,6 +42,11 @@ class AbstractLanguageModel(ABC):
         self.prompt_tokens: int = 0
         self.completion_tokens: int = 0
         self.cost: float = 0.0
+        # api_calls: 实际向模型后端发起请求的次数。
+        # 当 num_responses 被拆成多次 num_responses=1 时，这个值会真实反映调用次数。
+        self.api_calls: int = 0
+        # total_latency_seconds: 所有模型请求累计耗时，单位秒，用于比较时间成本。
+        self.total_latency_seconds: float = 0.0
         # 保存最近一次 get_response_texts() 提取出的观测信息。
         # operations.py 会在创建 Thought 时消费它，并写入 thought.metadata。
         self.last_response_metadata: List[Dict[str, Any]] = []
@@ -64,6 +69,14 @@ class AbstractLanguageModel(ABC):
             prompt_token_cost * prompt_tokens_k
             + response_token_cost * completion_tokens_k
         )
+
+    def _record_model_call(self, latency_seconds: float = 0.0) -> None:
+        """
+        记录一次真实模型调用。API 模型和本地模型都通过这个字段统一统计调用次数。
+        """
+        self.api_calls += 1
+        if latency_seconds is not None:
+            self.total_latency_seconds += float(latency_seconds)
 
     def _entropy_from_top_logprobs(self, top_logprobs: List[Any]) -> Union[float, None]:
         """
@@ -89,6 +102,37 @@ class AbstractLanguageModel(ABC):
 
         return -sum(prob * math.log2(prob) for prob in probs if prob > 0.0)
 
+    def _normalized_entropy_from_top_logprobs(
+        self, top_logprobs: List[Any], target_mass: float = 0.99
+    ) -> Union[float, None]:
+        """
+        将 API 返回的 top-k 概率重新缩放到指定概率质量后计算熵。
+
+        例如 target_mass=0.99 表示：假设 top-k token 覆盖了 0.99 的概率质量，
+        先把 top-k 内部相对概率归一化，再整体乘以 0.99。
+        这不是完整词表熵，只是为了让不同 API 的 top-k 近似口径更可比。
+        """
+        if target_mass <= 0.0:
+            return None
+        if not top_logprobs:
+            return None
+
+        probs = []
+        for item in top_logprobs:
+            logprob = getattr(item, "logprob", None)
+            if logprob is None and isinstance(item, dict):
+                logprob = item.get("logprob")
+            if logprob is None:
+                continue
+            probs.append(math.exp(float(logprob)))
+
+        prob_sum = sum(probs)
+        if prob_sum <= 0.0:
+            return None
+
+        scaled_probs = [(prob / prob_sum) * target_mass for prob in probs]
+        return -sum(prob * math.log2(prob) for prob in scaled_probs if prob > 0.0)
+
     def _extract_choice_logprob_metadata(self, choice: Any) -> Dict[str, Any]:
         """
         从 OpenAI 兼容的 choices 中提取 token 级可观测字段。
@@ -106,6 +150,7 @@ class AbstractLanguageModel(ABC):
 
         token_logprobs = []
         token_entropies = []
+        normalized_token_entropies = []
         tokens = []
         for token_info in content_logprobs:
             token = getattr(token_info, "token", None)
@@ -124,6 +169,16 @@ class AbstractLanguageModel(ABC):
             entropy = self._entropy_from_top_logprobs(top_logprobs or [])
             if entropy is not None:
                 token_entropies.append(entropy)
+
+            normalized_entropy = self._normalized_entropy_from_top_logprobs(
+                top_logprobs or [],
+                float(
+                    getattr(self, "top_logprobs_normalized_mass", 0.0)
+                    or 0.0
+                ),
+            )
+            if normalized_entropy is not None:
+                normalized_token_entropies.append(normalized_entropy)
 
         metadata: Dict[str, Any] = {
             # tokens: 实际生成出来的 token 序列，用于定位每个 token 的不确定性。
@@ -148,6 +203,17 @@ class AbstractLanguageModel(ABC):
             metadata["avg_entropy_bits"] = sum(token_entropies) / len(token_entropies)
             # entropy_estimate: 标记当前熵是用 top-k 候选概率估计的，不是完整词表熵。
             metadata["entropy_estimate"] = "top_logprobs"
+        if normalized_token_entropies:
+            # normalized_token_entropies_bits: 假设 top-k 概率质量为固定值后的归一化熵。
+            # 例如 top_logprobs_normalized_mass=0.99 时，top-k 内部相对概率会被缩放到 0.99。
+            metadata["normalized_token_entropies_bits"] = normalized_token_entropies
+            metadata["normalized_sum_entropy_bits"] = sum(normalized_token_entropies)
+            metadata["normalized_avg_entropy_bits"] = (
+                sum(normalized_token_entropies) / len(normalized_token_entropies)
+            )
+            metadata["normalized_entropy_mass"] = getattr(
+                self, "top_logprobs_normalized_mass", None
+            )
         return metadata
 
     def _set_last_response_metadata(

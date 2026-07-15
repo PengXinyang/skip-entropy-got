@@ -22,6 +22,7 @@ def build_language_model(
       - 例如：`gemini-2.5-flash-gcli` -> GCLIGemini(model_name='gemini-2.5-flash-gcli')
     - `gemini-*`：使用原生 Gemini SDK（Gemini）
     - `deepseek-*`：使用 DeepSeek API（DeepSeek）
+    - `*-hf` / `local-*`：使用本地 HuggingFace CausalLM（可计算完整词表熵）
     - 其它：默认使用 OpenAI/ChatGPT 兼容接口（ChatGPT）
 
     :param config_path: 配置文件路径
@@ -37,6 +38,15 @@ def build_language_model(
     """
     normalized = (model_name or "").strip()
     lower = normalized.lower()
+
+    if lower.endswith("-hf") or lower.startswith("local-"):
+        from graph_of_thoughts.language_models.hf_causal_lm import HFCausalLM
+
+        return HFCausalLM(
+            config_path,
+            model_name=normalized,
+            cache=cache,
+        )
 
     if lower.endswith("-gcli"):
         # 延迟导入，避免未安装或未使用时影响其它模型。

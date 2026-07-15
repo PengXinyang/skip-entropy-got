@@ -163,6 +163,7 @@ class Gemini(AbstractLanguageModel):
 
         self._calculate_cost()
         setattr(response, "_got_latency_seconds", latency)
+        self._record_model_call(latency)
 
         self.logger.info(
             "Gemini 响应: %s\n当前累计费用: $%.4f",
