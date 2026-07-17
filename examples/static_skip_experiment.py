@@ -84,10 +84,10 @@ def select_low_entropy_thoughts(
     entropy_field: str,
 ) -> Tuple[Dict[int, set], Dict[int, set], List[Dict[str, Any]]]:
     candidates = []
-    refine_delta_field = (
-        "abs_delta_normalized_avg_entropy_bits"
+    refine_entropy_field = (
+        "refined_normalized_avg_entropy_bits"
         if entropy_field == "normalized_avg_entropy_bits"
-        else "abs_delta_entropy_bits"
+        else "refined_entropy_bits"
     )
     for record in full_graph_json:
         if "operation" not in record:
@@ -102,8 +102,8 @@ def select_low_entropy_thoughts(
                 for event in metadata.get(
                     "validate_and_improve_refine_events", []
                 ):
-                    delta = event.get(refine_delta_field)
-                    if not isinstance(delta, (int, float)):
+                    entropy = event.get(refine_entropy_field)
+                    if not isinstance(entropy, (int, float)):
                         continue
                     candidates.append(
                         {
@@ -121,12 +121,22 @@ def select_low_entropy_thoughts(
                             "successors": record.get("successors", []),
                             "input_thought_index": event["input_thought_index"],
                             "try_index": event["try_index"],
-                            "entropy": float(delta),
-                            "ranking_score": float(delta),
-                            "delta_entropy_field": refine_delta_field,
+                            "entropy": float(entropy),
+                            "ranking_score": float(entropy),
+                            "entropy_field": refine_entropy_field,
+                            "input_entropy_bits": event.get("input_entropy_bits"),
+                            "refined_entropy_bits": event.get(
+                                "refined_entropy_bits"
+                            ),
                             "delta_entropy_bits": event.get("delta_entropy_bits"),
                             "abs_delta_entropy_bits": event.get(
                                 "abs_delta_entropy_bits"
+                            ),
+                            "input_normalized_avg_entropy_bits": event.get(
+                                "input_normalized_avg_entropy_bits"
+                            ),
+                            "refined_normalized_avg_entropy_bits": event.get(
+                                "refined_normalized_avg_entropy_bits"
                             ),
                             "delta_normalized_avg_entropy_bits": event.get(
                                 "delta_normalized_avg_entropy_bits"
@@ -226,9 +236,12 @@ def write_candidate_ranking(
         "ranking_score",
         "entropy",
         "entropy_field",
-        "delta_entropy_field",
+        "input_entropy_bits",
+        "refined_entropy_bits",
         "delta_entropy_bits",
         "abs_delta_entropy_bits",
+        "input_normalized_avg_entropy_bits",
+        "refined_normalized_avg_entropy_bits",
         "delta_normalized_avg_entropy_bits",
         "abs_delta_normalized_avg_entropy_bits",
         "predecessors",
