@@ -71,6 +71,50 @@ def _metadata_for_created_thought(
     return dict(response_metadata[-1])
 
 
+def _create_skipped_thought(
+    base_state: Dict,
+    operation: "Operation",
+    thought_index: int,
+    skip_marker: str,
+    prompt_role: str,
+) -> Thought:
+    """
+    为 thought 级 skip 创建占位 Thought。
+
+    图结构和 thought 位置保持不变，但该 thought 对应的 LLM 调用不会发生。
+    """
+    skipped_state = dict(base_state or {})
+    skipped_state["current"] = skip_marker
+    skipped_state["skipped"] = True
+    skipped_state["skip_source_operation_id"] = operation.id
+    skipped_state["skip_source_thought_index"] = thought_index
+    return Thought(
+        skipped_state,
+        metadata={
+            "skipped": True,
+            "skip_marker": skip_marker,
+            "skip_level": "thought",
+            "operation_id": operation.id,
+            "operation_type": operation.operation_type.name,
+            "thought_index": thought_index,
+            "prompt_role": prompt_role,
+            "predecessor_operation_ids": [
+                predecessor.id for predecessor in operation.predecessors
+            ],
+        },
+    )
+
+
+def _numeric_metadata_value(metadata: Dict[str, Any], field: str) -> Union[float, None]:
+    """
+    从 metadata 中安全读取数值字段。
+    """
+    value = metadata.get(field)
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
 def _force_single_response_calls(lm: AbstractLanguageModel) -> bool:
     """
     判断是否把一次 num_responses=N 的请求拆成 N 次 num_responses=1。
@@ -155,6 +199,13 @@ class Operation(ABC):
         self.predecessors: List[Operation] = []
         self.successors: List[Operation] = []
         self.executed: bool = False
+        # skip_thought_indices: 当前 operation 内需要跳过的 thought 序号。
+        # Controller 会在执行前写入，Generate/Improve/Aggregate 在各自调用点消费。
+        self.skip_thought_indices: set = set()
+        # skip_refine_indices: ValidateAndImprove 内部 refine 事件的跳过集合。
+        # 元素为 (input_thought_index, try_index)，表示第几个输入 thought 的第几次 refine。
+        self.skip_refine_indices: set = set()
+        self.skip_marker: str = "[SKIP]"
 
     def can_be_executed(self) -> bool:
         """
@@ -221,51 +272,6 @@ class Operation(ABC):
         )
         self._execute(lm, prompter, parser, **kwargs)
         self.logger.debug("Operation %d executed", self.id)
-        self.executed = True
-
-    def skip(self, skip_marker: str = "[SKIP]", **kwargs) -> None:
-        """
-        在不调用语言模型的情况下跳过当前 operation，同时保留 operation 节点，
-        并为下游 operation 生成占位 Thought 对象。
-
-        该方法用于静态压缩实验：图拓扑保持不变，但选中的 LLM 生成节点
-        会被替换为 [SKIP]。
-        """
-        assert self.can_be_executed(), "Not all predecessors have been executed"
-        previous_thoughts: List[Thought] = self.get_previous_thoughts()
-        if len(previous_thoughts) == 0:
-            previous_thoughts = [Thought(state=kwargs)]
-
-        skipped_thoughts: List[Thought] = []
-        num_placeholders = max(1, getattr(self, "num_branches_response", 1))
-        for thought in previous_thoughts:
-            for _ in range(num_placeholders):
-                skipped_state = dict(thought.state or {})
-                skipped_state["current"] = skip_marker
-                skipped_state["skipped"] = True
-                skipped_state["skip_source_operation_id"] = self.id
-                skipped_thoughts.append(
-                    Thought(
-                        skipped_state,
-                        metadata={
-                            "skipped": True,
-                            "skip_marker": skip_marker,
-                            "operation_id": self.id,
-                            "operation_type": self.operation_type.name,
-                            "predecessor_operation_ids": [
-                                predecessor.id for predecessor in self.predecessors
-                            ],
-                        },
-                    )
-                )
-
-        self.thoughts.extend(skipped_thoughts)
-        self.logger.info(
-            "Operation %d of type %s skipped and created %d placeholder thoughts",
-            self.id,
-            self.operation_type,
-            len(skipped_thoughts),
-        )
         self.executed = True
 
     @abstractmethod
@@ -486,7 +492,7 @@ class ValidateAndImprove(Operation):
             len(self.predecessors) > 0
         ), "ValidateAndImprove operation needs at least one predecessor"
 
-        for thought in previous_thoughts:
+        for input_thought_index, thought in enumerate(previous_thoughts):
             thought_list = []
             current_thought = Thought.from_thought(thought)
             current_try = 0
@@ -519,6 +525,54 @@ class ValidateAndImprove(Operation):
                     or current_try >= self.num_tries
                 ):
                     break
+
+                refine_key = (input_thought_index, current_try)
+                if refine_key in self.skip_refine_indices:
+                    skipped_state = dict(current_thought.state or {})
+                    skipped_state["skipped"] = True
+                    skipped_state["skip_role"] = "validate_and_improve_refine"
+                    skipped_state["skip_source_operation_id"] = self.id
+                    skipped_state["skip_source_input_thought_index"] = (
+                        input_thought_index
+                    )
+                    skipped_state["skip_source_try_index"] = current_try
+                    skipped_thought = Thought(
+                        skipped_state,
+                        metadata=dict(current_thought.metadata),
+                    )
+                    skipped_thought.metadata.update(
+                        {
+                            "skipped": True,
+                            "skip_marker": self.skip_marker,
+                            "skip_level": "validate_and_improve_refine",
+                            "operation_id": self.id,
+                            "operation_type": self.operation_type.name,
+                            "input_thought_index": input_thought_index,
+                            "try_index": current_try,
+                            "prompt_role": "validate_and_improve_refine",
+                            "skip_validate_after_refine": True,
+                            "predecessor_operation_ids": [
+                                predecessor.id
+                                for predecessor in self.predecessors
+                            ],
+                        }
+                    )
+                    skipped_thought.validated = current_thought.validated
+                    skipped_thought._valid = current_thought.valid
+                    thought_list.append(skipped_thought)
+                    break
+
+                input_entropy = _numeric_metadata_value(
+                    current_thought.metadata, "avg_entropy_bits"
+                )
+                input_normalized_entropy = _numeric_metadata_value(
+                    current_thought.metadata, "normalized_avg_entropy_bits"
+                )
+                previous_refine_events = list(
+                    current_thought.metadata.get(
+                        "validate_and_improve_refine_events", []
+                    )
+                )
                 improve_prompt = prompter.improve_prompt(**current_thought.state)
                 self.logger.debug("Prompt for LM: %s", improve_prompt)
                 responses, improve_metadata = _query_lm_with_metadata(
@@ -532,6 +586,85 @@ class ValidateAndImprove(Operation):
                     {**current_thought.state, **state_update},
                     metadata=_metadata_for_created_thought(improve_metadata, 0),
                 )
+                current_thought.metadata.update(
+                    {
+                        "input_thought_index": input_thought_index,
+                        "try_index": current_try,
+                        "prompt_role": "validate_and_improve_refine",
+                    }
+                )
+                refined_entropy = _numeric_metadata_value(
+                    current_thought.metadata, "avg_entropy_bits"
+                )
+                if input_entropy is not None and refined_entropy is not None:
+                    delta_entropy = refined_entropy - input_entropy
+                    current_thought.metadata["input_entropy_bits"] = input_entropy
+                    current_thought.metadata["refined_entropy_bits"] = refined_entropy
+                    current_thought.metadata["delta_entropy_bits"] = delta_entropy
+                    current_thought.metadata["abs_delta_entropy_bits"] = abs(
+                        delta_entropy
+                    )
+                refined_normalized_entropy = _numeric_metadata_value(
+                    current_thought.metadata, "normalized_avg_entropy_bits"
+                )
+                if (
+                    input_normalized_entropy is not None
+                    and refined_normalized_entropy is not None
+                ):
+                    normalized_delta = (
+                        refined_normalized_entropy - input_normalized_entropy
+                    )
+                    current_thought.metadata[
+                        "input_normalized_avg_entropy_bits"
+                    ] = input_normalized_entropy
+                    current_thought.metadata[
+                        "refined_normalized_avg_entropy_bits"
+                    ] = refined_normalized_entropy
+                    current_thought.metadata[
+                        "delta_normalized_avg_entropy_bits"
+                    ] = normalized_delta
+                    current_thought.metadata[
+                        "abs_delta_normalized_avg_entropy_bits"
+                    ] = abs(normalized_delta)
+                refine_event = {
+                    "operation_id": self.id,
+                    "operation_type": self.operation_type.name,
+                    "input_thought_index": input_thought_index,
+                    "try_index": current_try,
+                    "event_type": "refine",
+                    "entropy_field": "avg_entropy_bits",
+                    "input_entropy_bits": input_entropy,
+                    "refined_entropy_bits": refined_entropy,
+                    "delta_entropy_bits": (
+                        refined_entropy - input_entropy
+                        if input_entropy is not None and refined_entropy is not None
+                        else None
+                    ),
+                    "abs_delta_entropy_bits": (
+                        abs(refined_entropy - input_entropy)
+                        if input_entropy is not None and refined_entropy is not None
+                        else None
+                    ),
+                    "input_normalized_avg_entropy_bits": input_normalized_entropy,
+                    "refined_normalized_avg_entropy_bits": refined_normalized_entropy,
+                    "delta_normalized_avg_entropy_bits": (
+                        refined_normalized_entropy - input_normalized_entropy
+                        if input_normalized_entropy is not None
+                        and refined_normalized_entropy is not None
+                        else None
+                    ),
+                    "abs_delta_normalized_avg_entropy_bits": (
+                        abs(refined_normalized_entropy - input_normalized_entropy)
+                        if input_normalized_entropy is not None
+                        and refined_normalized_entropy is not None
+                        else None
+                    ),
+                }
+                refine_events = previous_refine_events
+                refine_events.append(refine_event)
+                current_thought.metadata[
+                    "validate_and_improve_refine_events"
+                ] = refine_events
                 current_try += 1
             self.thoughts.append(thought_list)
 
@@ -610,27 +743,64 @@ class Generate(Operation):
             base_state = thought.state
             prompt = prompter.generate_prompt(self.num_branches_prompt, **base_state)
             self.logger.debug("Prompt for LM: %s", prompt)
-            responses, response_metadata = _query_lm_with_metadata(
-                lm, prompt, self.num_branches_response, self, "generate"
-            )
-            self.logger.debug("Responses from LM: %s", responses)
-            for index, new_state in enumerate(
-                parser.parse_generate_answer(base_state, responses)
-            ):
-                new_state = {**base_state, **new_state}
-                self.thoughts.append(
-                    Thought(
-                        new_state,
-                        metadata=_metadata_for_created_thought(
-                            response_metadata, index
-                        ),
+            if self.skip_thought_indices:
+                for response_index in range(self.num_branches_response):
+                    thought_index = len(self.thoughts)
+                    if thought_index in self.skip_thought_indices:
+                        self.thoughts.append(
+                            _create_skipped_thought(
+                                base_state,
+                                self,
+                                thought_index,
+                                self.skip_marker,
+                                "generate",
+                            )
+                        )
+                        continue
+
+                    responses, response_metadata = _query_lm_with_metadata(
+                        lm, prompt, 1, self, "generate"
                     )
+                    for item in response_metadata:
+                        item["response_call_index"] = response_index
+                        item["requested_num_responses"] = self.num_branches_response
+                        item["thought_index"] = thought_index
+                    self.logger.debug("Responses from LM: %s", responses)
+                    parsed_states = parser.parse_generate_answer(base_state, responses)
+                    for parsed_index, new_state in enumerate(parsed_states):
+                        new_state = {**base_state, **new_state}
+                        metadata = _metadata_for_created_thought(
+                            response_metadata, parsed_index
+                        )
+                        metadata.setdefault("thought_index", len(self.thoughts))
+                        self.thoughts.append(Thought(new_state, metadata=metadata))
+                        self.logger.debug(
+                            "New thought %d created with state %s",
+                            self.thoughts[-1].id,
+                            self.thoughts[-1].state,
+                        )
+            else:
+                responses, response_metadata = _query_lm_with_metadata(
+                    lm, prompt, self.num_branches_response, self, "generate"
                 )
-                self.logger.debug(
-                    "New thought %d created with state %s",
-                    self.thoughts[-1].id,
-                    self.thoughts[-1].state,
-                )
+                self.logger.debug("Responses from LM: %s", responses)
+                for index, new_state in enumerate(
+                    parser.parse_generate_answer(base_state, responses)
+                ):
+                    new_state = {**base_state, **new_state}
+                    metadata = _metadata_for_created_thought(response_metadata, index)
+                    metadata.setdefault("thought_index", len(self.thoughts))
+                    self.thoughts.append(
+                        Thought(
+                            new_state,
+                            metadata=metadata,
+                        )
+                    )
+                    self.logger.debug(
+                        "New thought %d created with state %s",
+                        self.thoughts[-1].id,
+                        self.thoughts[-1].state,
+                    )
         if (
             len(self.thoughts)
             > self.num_branches_prompt
@@ -691,11 +861,26 @@ class Improve(Operation):
         assert len(self.predecessors) > 0, "Needs at least one predecessor"
 
         for thought in previous_thoughts:
+            thought_index = len(self.thoughts)
+            if thought_index in self.skip_thought_indices:
+                self.thoughts.append(
+                    _create_skipped_thought(
+                        thought.state,
+                        self,
+                        thought_index,
+                        self.skip_marker,
+                        "improve",
+                    )
+                )
+                continue
+
             improve_prompt = prompter.improve_prompt(**thought.state)
             self.logger.debug("Prompt for LM: %s", improve_prompt)
             responses, improve_metadata = _query_lm_with_metadata(
                 lm, improve_prompt, 1, self, "improve"
             )
+            for item in improve_metadata:
+                item["thought_index"] = thought_index
             self.logger.debug("Responses from LM: %s", responses)
             state_update = parser.parse_improve_answer(thought.state, responses)
             self.thoughts.append(
@@ -772,65 +957,63 @@ class Aggregate(Operation):
 
         self.logger.debug("Prompt for LM: %s", prompt)
 
-        responses, response_metadata = _query_lm_with_metadata(
-            lm, prompt, self.num_responses, self, "aggregate"
-        )
+        if self.skip_thought_indices:
+            for response_index in range(self.num_responses):
+                thought_index = len(self.thoughts)
+                if thought_index in self.skip_thought_indices:
+                    self.thoughts.append(
+                        _create_skipped_thought(
+                            base_state,
+                            self,
+                            thought_index,
+                            self.skip_marker,
+                            "aggregate",
+                        )
+                    )
+                    continue
 
-        self.logger.debug("Responses from LM: %s", responses)
-
-        parsed = parser.parse_aggregation_answer(previous_thought_states, responses)
-
-        if isinstance(parsed, dict):
-            parsed = [parsed]
-        for index, new_state in enumerate(parsed):
-            self.thoughts.append(
-                Thought(
-                    {**base_state, **new_state},
-                    metadata=_metadata_for_created_thought(response_metadata, index),
+                responses, response_metadata = _query_lm_with_metadata(
+                    lm, prompt, 1, self, "aggregate"
                 )
+                for item in response_metadata:
+                    item["response_call_index"] = response_index
+                    item["requested_num_responses"] = self.num_responses
+                    item["thought_index"] = thought_index
+
+                self.logger.debug("Responses from LM: %s", responses)
+                parsed = parser.parse_aggregation_answer(
+                    previous_thought_states, responses
+                )
+                if isinstance(parsed, dict):
+                    parsed = [parsed]
+                for parsed_index, new_state in enumerate(parsed):
+                    metadata = _metadata_for_created_thought(
+                        response_metadata, parsed_index
+                    )
+                    metadata.setdefault("thought_index", len(self.thoughts))
+                    self.thoughts.append(
+                        Thought({**base_state, **new_state}, metadata=metadata)
+                    )
+        else:
+            responses, response_metadata = _query_lm_with_metadata(
+                lm, prompt, self.num_responses, self, "aggregate"
             )
 
-    def skip(self, skip_marker: str = "[SKIP]", **kwargs) -> None:
-        """
-        在不调用语言模型的情况下跳过聚合。占位结果会保留合并后的上游 state，
-        使下游 operation 仍能看到结构有效的图节点。
-        """
-        assert self.can_be_executed(), "Not all predecessors have been executed"
-        previous_thoughts: List[Thought] = self.get_previous_thoughts()
-        if len(previous_thoughts) == 0:
-            self.executed = True
-            return
+            self.logger.debug("Responses from LM: %s", responses)
 
-        base_state: Dict = {}
-        for thought in sorted(previous_thoughts, key=lambda thought: thought.score):
-            base_state = {**base_state, **thought.state}
-        base_state["current"] = skip_marker
-        base_state["skipped"] = True
-        base_state["skip_source_operation_id"] = self.id
+            parsed = parser.parse_aggregation_answer(previous_thought_states, responses)
 
-        for _ in range(max(1, self.num_responses)):
-            self.thoughts.append(
-                Thought(
-                    dict(base_state),
-                    metadata={
-                        "skipped": True,
-                        "skip_marker": skip_marker,
-                        "operation_id": self.id,
-                        "operation_type": self.operation_type.name,
-                        "predecessor_operation_ids": [
-                            predecessor.id for predecessor in self.predecessors
-                        ],
-                    },
+            if isinstance(parsed, dict):
+                parsed = [parsed]
+            for index, new_state in enumerate(parsed):
+                metadata = _metadata_for_created_thought(response_metadata, index)
+                metadata.setdefault("thought_index", len(self.thoughts))
+                self.thoughts.append(
+                    Thought(
+                        {**base_state, **new_state},
+                        metadata=metadata,
+                    )
                 )
-            )
-
-        self.logger.info(
-            "Aggregate operation %d skipped and created %d placeholder thoughts",
-            self.id,
-            len(self.thoughts),
-        )
-        self.executed = True
-
 
 class KeepBestN(Operation):
     """

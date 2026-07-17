@@ -7,7 +7,7 @@
 
 import json
 import logging
-from typing import List
+from typing import Dict, List, Set
 from graph_of_thoughts.language_models import AbstractLanguageModel
 from graph_of_thoughts.operations import GraphOfOperations, Thought
 from graph_of_thoughts.prompter import Prompter
@@ -28,8 +28,8 @@ class Controller:
         prompter: Prompter,
         parser: Parser,
         problem_parameters: dict,
-        skip_operation_ids: set = None,
-        skip_operation_indices: set = None,
+        skip_thought_indices: Dict[int, Set[int]] = None,
+        skip_refine_indices: Dict[int, Set[tuple]] = None,
         skip_marker: str = "[SKIP]",
     ) -> None:
         """
@@ -45,10 +45,10 @@ class Controller:
         :type parser: Parser
         :param problem_parameters: 问题的初始参数或 state。
         :type problem_parameters: dict
-        :param skip_operation_ids: 要替换为 skip 占位符的 operation id。
-        :type skip_operation_ids: set
-        :param skip_operation_indices: graph.operations 中要跳过的 operation 位置。
-        :type skip_operation_indices: set
+        :param skip_thought_indices: 按 operation_index 指定要跳过的 thought_index 集合。
+        :type skip_thought_indices: Dict[int, Set[int]]
+        :param skip_refine_indices: 按 operation_index 指定要跳过的 validate_and_improve refine 事件。
+        :type skip_refine_indices: Dict[int, Set[tuple]]
         :param skip_marker: 跳过节点使用的占位文本。
         :type skip_marker: str
         """
@@ -58,8 +58,8 @@ class Controller:
         self.prompter = prompter
         self.parser = parser
         self.problem_parameters = problem_parameters
-        self.skip_operation_ids = skip_operation_ids or set()
-        self.skip_operation_indices = skip_operation_indices or set()
+        self.skip_thought_indices = skip_thought_indices or {}
+        self.skip_refine_indices = skip_refine_indices or {}
         self.skip_marker = skip_marker
         self.run_executed = False
 
@@ -84,20 +84,16 @@ class Controller:
             current_operation = execution_queue.pop(0)
             self.logger.info("Executing operation %s", current_operation.operation_type)
             current_operation_index = self.graph.operations.index(current_operation)
-            if (
-                current_operation.id in self.skip_operation_ids
-                or current_operation_index in self.skip_operation_indices
-            ):
-                self.logger.info(
-                    "Skipping operation %s at index %d",
-                    current_operation.operation_type,
-                    current_operation_index,
-                )
-                current_operation.skip(self.skip_marker, **self.problem_parameters)
-            else:
-                current_operation.execute(
-                    self.lm, self.prompter, self.parser, **self.problem_parameters
-                )
+            current_operation.skip_marker = self.skip_marker
+            current_operation.skip_thought_indices = set(
+                self.skip_thought_indices.get(current_operation_index, set())
+            )
+            current_operation.skip_refine_indices = set(
+                self.skip_refine_indices.get(current_operation_index, set())
+            )
+            current_operation.execute(
+                self.lm, self.prompter, self.parser, **self.problem_parameters
+            )
             self.logger.info("Operation %s executed", current_operation.operation_type)
             for operation in current_operation.successors:
                 assert (
@@ -146,6 +142,9 @@ class Controller:
                 "successors": [successor.id for successor in operation.successors],
                 # thoughts: 当前 operation 产生或保留的状态，由 parser 解析得到。
                 "thoughts": [thought.state for thought in thoughts],
+                # thought_indices: thoughts 在当前 operation 内的局部序号；
+                # thought 级 skip 实验使用 (operation_index, thought_index) 定位节点。
+                "thought_indices": list(range(len(thoughts))),
                 # thought_metadata: 与 thoughts 对齐的观测数据，用于后续节点熵实验。
                 "thought_metadata": thought_metadata,
             }
