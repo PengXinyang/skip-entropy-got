@@ -82,6 +82,7 @@ def select_low_entropy_thoughts(
     full_graph_json: List[Dict[str, Any]],
     skip_ratio: float,
     entropy_field: str,
+    skip_order: str,
 ) -> Tuple[Dict[int, set], Dict[int, set], List[Dict[str, Any]]]:
     candidates = []
     refine_entropy_field = (
@@ -181,7 +182,8 @@ def select_low_entropy_thoughts(
                 }
             )
 
-    candidates.sort(key=lambda item: item["entropy"])
+    reverse = skip_order == "high"
+    candidates.sort(key=lambda item: item["entropy"], reverse=reverse)
     num_to_skip = int(len(candidates) * skip_ratio)
     selected = candidates[:num_to_skip]
     skip_thought_indices: Dict[int, set] = {}
@@ -307,6 +309,12 @@ def main() -> None:
         ),
     )
     parser.add_argument("--skip-ratio", type=float, default=0.2)
+    parser.add_argument(
+        "--skip-order",
+        choices=["low", "high"],
+        default="low",
+        help="low 表示跳过低熵节点；high 表示跳过高熵节点。",
+    )
     parser.add_argument("--entropy-field", default="avg_entropy_bits")
     parser.add_argument(
         "--output-dir",
@@ -320,7 +328,10 @@ def main() -> None:
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = os.path.join(
         args.output_dir,
-        f"sorting032_{args.model_name}_id{args.data_id}_skip{args.skip_ratio}_{timestamp}",
+        (
+            f"sorting032_{args.model_name}_id{args.data_id}_"
+            f"skip{args.skip_ratio}_{args.skip_order}_{timestamp}"
+        ),
     )
     os.makedirs(run_dir, exist_ok=True)
 
@@ -345,6 +356,7 @@ def main() -> None:
         full_json,
         args.skip_ratio,
         args.entropy_field,
+        args.skip_order,
     )
     write_candidate_ranking(
         ranked_candidates,
@@ -368,6 +380,7 @@ def main() -> None:
         "model_name": args.model_name,
         "entropy_field": args.entropy_field,
         "skip_ratio": args.skip_ratio,
+        "skip_order": args.skip_order,
         "selected_skip_thought_indices": {
             str(operation_index): sorted(thought_indices)
             for operation_index, thought_indices in sorted(
