@@ -21,6 +21,7 @@ from examples.set_intersection import (
     set_intersection_064,
     set_intersection_128,
 )
+from examples.sorting import sorting_128
 from examples.static_skip_experiment import (
     final_solved,
     reduction_ratio,
@@ -150,6 +151,34 @@ def load_set_intersection_cases(
                     "set1": row[1],
                     "set2": row[2],
                     "result": row[3],
+                }
+            )
+    return limit_cases(cases, max_cases)
+
+
+def load_sorting_cases(
+    dataset_name: str,
+    data_ids: Optional[Sequence[int]],
+    max_cases: Optional[int],
+) -> List[Case]:
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "sorting",
+        f"{dataset_name}.csv",
+    )
+    cases: List[Case] = []
+    with open(path, "r", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        next(reader)
+        for row in reader:
+            case_id = int(row[0])
+            if data_ids is not None and case_id not in data_ids:
+                continue
+            cases.append(
+                {
+                    "id": case_id,
+                    "original": row[1],
+                    "ground_truth": row[2],
                 }
             )
     return limit_cases(cases, max_cases)
@@ -377,13 +406,35 @@ def build_task_specs() -> Dict[str, TaskSpec]:
                 "method": method_name,
             },
         ),
+        "sorting_128": TaskSpec(
+            name="sorting_128",
+            method_name="got",
+            load_cases=lambda data_ids, max_cases: load_sorting_cases(
+                "sorting_128", data_ids, max_cases
+            ),
+            build_graph=sorting_128.got,
+            build_prompter=sorting_128.SortingPrompter,
+            build_parser=sorting_128.SortingParser,
+            initial_state=lambda case, method_name: {
+                "original": case["original"],
+                "ground_truth": case["ground_truth"],
+                "current": "",
+                "phase": 0,
+                "method": method_name,
+            },
+        ),
     }
 
 
 def selected_tasks(
     task_specs: Dict[str, TaskSpec], requested: Optional[str]
 ) -> List[TaskSpec]:
-    default_tasks = ["doc_merge", "keyword_counting", "set_intersection_032"]
+    default_tasks = [
+        "doc_merge",
+        "keyword_counting",
+        "set_intersection_128",
+        "sorting_128",
+    ]
     names = (
         [item.strip() for item in requested.split(",") if item.strip()]
         if requested
@@ -527,7 +578,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Batch static thought-level [SKIP] replay experiment for doc_merge, "
-            "keyword_counting, and set_intersection tasks."
+            "keyword_counting, set_intersection, and sorting tasks."
         )
     )
     parser.add_argument("--model-name", required=True)
@@ -546,7 +597,7 @@ def main() -> None:
         default=None,
         help=(
             "Comma-separated task names. Defaults to "
-            "doc_merge,keyword_counting,set_intersection_032."
+            "doc_merge,keyword_counting,set_intersection_128,sorting_128."
         ),
     )
     parser.add_argument(
