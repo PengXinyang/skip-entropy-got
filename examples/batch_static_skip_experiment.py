@@ -1,7 +1,9 @@
 import argparse
+import contextlib
 import csv
 import datetime
 import json
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -214,20 +216,25 @@ def run_task_got(
     skip_thought_indices: Optional[Dict[int, set]] = None,
     skip_refine_indices: Optional[Dict[int, set]] = None,
 ) -> Tuple[controller.Controller, List[Dict[str, Any]]]:
-    lm = build_language_model(config_path, model_name, cache=False)
-    graph = task.build_graph()
-    ctrl = controller.Controller(
-        lm,
-        graph,
-        task.build_prompter(),
-        task.build_parser(),
-        task.initial_state(case, task.method_name),
-        skip_thought_indices=skip_thought_indices or {},
-        skip_refine_indices=skip_refine_indices or {},
-    )
-    ctrl.run()
-    sanitize_graph_for_json(graph)
-    ctrl.output_graph(output_path)
+    console_log_path = f"{output_path}.console.log"
+    with open(console_log_path, "a", encoding="utf-8") as console_log:
+        with contextlib.redirect_stdout(console_log), contextlib.redirect_stderr(
+            console_log
+        ):
+            lm = build_language_model(config_path, model_name, cache=False)
+            graph = task.build_graph()
+            ctrl = controller.Controller(
+                lm,
+                graph,
+                task.build_prompter(),
+                task.build_parser(),
+                task.initial_state(case, task.method_name),
+                skip_thought_indices=skip_thought_indices or {},
+                skip_refine_indices=skip_refine_indices or {},
+            )
+            ctrl.run()
+            sanitize_graph_for_json(graph)
+            ctrl.output_graph(output_path)
     return ctrl, read_json(output_path)
 
 
@@ -249,6 +256,36 @@ def case_summary(
     compressed_tokens = token_summary(compressed_json)
     skipped_thoughts = sum(len(items) for items in skip_thought_indices.values())
     skipped_refines = sum(len(items) for items in skip_refine_indices.values())
+    full_solved = final_solved(full_json) if task.has_ground_truth else None
+    compressed_solved = (
+        final_solved(compressed_json) if task.has_ground_truth else None
+    )
+    key_metrics = {
+        "full_solved": full_solved,
+        "compressed_solved": compressed_solved,
+        "total_tokens_saved": (
+            full_tokens["total_tokens"] - compressed_tokens["total_tokens"]
+        ),
+        "total_token_reduction": reduction_ratio(
+            full_tokens["total_tokens"], compressed_tokens["total_tokens"]
+        ),
+        "api_calls_saved": full_tokens["api_calls"] - compressed_tokens["api_calls"],
+        "api_call_reduction": reduction_ratio(
+            full_tokens["api_calls"], compressed_tokens["api_calls"]
+        ),
+        "cost_saved": full_tokens["cost"] - compressed_tokens["cost"],
+        "cost_reduction": reduction_ratio(
+            full_tokens["cost"], compressed_tokens["cost"]
+        ),
+        "latency_seconds_saved": (
+            full_tokens["total_latency_seconds"]
+            - compressed_tokens["total_latency_seconds"]
+        ),
+        "latency_reduction": reduction_ratio(
+            full_tokens["total_latency_seconds"],
+            compressed_tokens["total_latency_seconds"],
+        ),
+    }
     return {
         "task": task.name,
         "method": task.method_name,
@@ -278,14 +315,13 @@ def case_summary(
         "num_candidates": len(ranked_candidates),
         "num_skipped_thoughts": skipped_thoughts,
         "num_skipped_refines": skipped_refines,
+        "key_metrics": key_metrics,
         "full": {
-            "solved": final_solved(full_json) if task.has_ground_truth else None,
+            "solved": full_solved,
             **full_tokens,
         },
         "compressed": {
-            "solved": (
-                final_solved(compressed_json) if task.has_ground_truth else None
-            ),
+            "solved": compressed_solved,
             **compressed_tokens,
         },
         "reductions": {
@@ -643,6 +679,12 @@ def main() -> None:
         ),
     )
     os.makedirs(run_root, exist_ok=True)
+    logging.basicConfig(
+        filename=os.path.join(run_root, "run.log"),
+        filemode="w",
+        level=logging.WARNING,
+        force=True,
+    )
 
     all_summaries: List[Dict[str, Any]] = []
     for task in tasks:
@@ -658,8 +700,6 @@ def main() -> None:
     )
     with open(batch_summary_path, "w", encoding="utf-8") as f:
         json.dump(batch_summary, f, indent=2)
-
-    print(json.dumps(batch_summary, indent=2))
 
 
 if __name__ == "__main__":

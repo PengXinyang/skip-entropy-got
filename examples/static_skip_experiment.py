@@ -1,7 +1,9 @@
 import argparse
+import contextlib
 import csv
 import datetime
 import json
+import logging
 import os
 import sys
 from typing import Any, Dict, List, Tuple
@@ -52,24 +54,29 @@ def run_sorting_got(
     skip_thought_indices: Dict[int, set] = None,
     skip_refine_indices: Dict[int, set] = None,
 ) -> Tuple[controller.Controller, Dict[str, Any]]:
-    lm = build_language_model(config_path, model_name, cache=False)
-    graph = sorting_032.got()
-    ctrl = controller.Controller(
-        lm,
-        graph,
-        sorting_032.SortingPrompter(),
-        sorting_032.SortingParser(),
-        {
-            "original": problem["original"],
-            "current": "",
-            "phase": 0,
-            "method": "got",
-        },
-        skip_thought_indices=skip_thought_indices or {},
-        skip_refine_indices=skip_refine_indices or {},
-    )
-    ctrl.run()
-    ctrl.output_graph(output_path)
+    console_log_path = f"{output_path}.console.log"
+    with open(console_log_path, "a", encoding="utf-8") as console_log:
+        with contextlib.redirect_stdout(console_log), contextlib.redirect_stderr(
+            console_log
+        ):
+            lm = build_language_model(config_path, model_name, cache=False)
+            graph = sorting_032.got()
+            ctrl = controller.Controller(
+                lm,
+                graph,
+                sorting_032.SortingPrompter(),
+                sorting_032.SortingParser(),
+                {
+                    "original": problem["original"],
+                    "current": "",
+                    "phase": 0,
+                    "method": "got",
+                },
+                skip_thought_indices=skip_thought_indices or {},
+                skip_refine_indices=skip_refine_indices or {},
+            )
+            ctrl.run()
+            ctrl.output_graph(output_path)
     return ctrl, read_json(output_path)
 
 
@@ -334,6 +341,12 @@ def main() -> None:
         ),
     )
     os.makedirs(run_dir, exist_ok=True)
+    logging.basicConfig(
+        filename=os.path.join(run_dir, "run.log"),
+        filemode="w",
+        level=logging.WARNING,
+        force=True,
+    )
 
     problem = load_sorting_case(args.data_id)
     full_path = os.path.join(run_dir, "full_graph.json")
@@ -342,6 +355,7 @@ def main() -> None:
     ranking_json_path = os.path.join(run_dir, "candidate_ranking.json")
     ranking_csv_path = os.path.join(run_dir, "candidate_ranking.csv")
 
+    print(f"Running sorting_032 id={problem['id']}")
     _, full_json = run_sorting_got(
         args.config_path,
         args.model_name,
@@ -374,6 +388,34 @@ def main() -> None:
 
     full_tokens = token_summary(full_json)
     compressed_tokens = token_summary(compressed_json)
+    full_solved = final_solved(full_json)
+    compressed_solved = final_solved(compressed_json)
+    key_metrics = {
+        "full_solved": full_solved,
+        "compressed_solved": compressed_solved,
+        "total_tokens_saved": (
+            full_tokens["total_tokens"] - compressed_tokens["total_tokens"]
+        ),
+        "total_token_reduction": reduction_ratio(
+            full_tokens["total_tokens"], compressed_tokens["total_tokens"]
+        ),
+        "api_calls_saved": full_tokens["api_calls"] - compressed_tokens["api_calls"],
+        "api_call_reduction": reduction_ratio(
+            full_tokens["api_calls"], compressed_tokens["api_calls"]
+        ),
+        "cost_saved": full_tokens["cost"] - compressed_tokens["cost"],
+        "cost_reduction": reduction_ratio(
+            full_tokens["cost"], compressed_tokens["cost"]
+        ),
+        "latency_seconds_saved": (
+            full_tokens["total_latency_seconds"]
+            - compressed_tokens["total_latency_seconds"]
+        ),
+        "latency_reduction": reduction_ratio(
+            full_tokens["total_latency_seconds"],
+            compressed_tokens["total_latency_seconds"],
+        ),
+    }
     summary = {
         "task": "sorting_032_got",
         "data_id": args.data_id,
@@ -408,12 +450,13 @@ def main() -> None:
             len(refine_indices)
             for refine_indices in skip_refine_indices.values()
         ),
+        "key_metrics": key_metrics,
         "full": {
-            "solved": final_solved(full_json),
+            "solved": full_solved,
             **full_tokens,
         },
         "compressed": {
-            "solved": final_solved(compressed_json),
+            "solved": compressed_solved,
             **compressed_tokens,
         },
         "reductions": {
@@ -463,8 +506,6 @@ def main() -> None:
     }
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
-
-    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
