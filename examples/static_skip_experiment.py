@@ -192,7 +192,47 @@ def select_low_entropy_thoughts(
     reverse = skip_order == "high"
     candidates.sort(key=lambda item: item["entropy"], reverse=reverse)
     num_to_skip = int(len(candidates) * skip_ratio)
-    selected = candidates[:num_to_skip]
+    thought_candidate_counts: Dict[int, int] = {}
+    refine_candidate_counts: Dict[int, int] = {}
+    for item in candidates:
+        if item["candidate_type"] == "validate_and_improve_refine":
+            refine_candidate_counts[item["operation_index"]] = (
+                refine_candidate_counts.get(item["operation_index"], 0) + 1
+            )
+        else:
+            thought_candidate_counts[item["operation_index"]] = (
+                thought_candidate_counts.get(item["operation_index"], 0) + 1
+            )
+
+    selected = []
+    selected_thought_counts: Dict[int, int] = {}
+    selected_refine_counts: Dict[int, int] = {}
+    for item in candidates:
+        if len(selected) >= num_to_skip:
+            break
+        operation_index = item["operation_index"]
+        if item["candidate_type"] == "validate_and_improve_refine":
+            # 至少保留一个 refine 机会，避免整个 operation 只剩 skip 占位。
+            selected_count = selected_refine_counts.get(operation_index, 0)
+            total_count = refine_candidate_counts.get(operation_index, 0)
+            if total_count > 0 and selected_count >= total_count - 1:
+                item["skip_exclusion_reason"] = (
+                    "keep_at_least_one_refine_candidate_per_operation"
+                )
+                continue
+            selected_refine_counts[operation_index] = selected_count + 1
+        else:
+            # thought 级 skip 会把 current 写成 [SKIP]；如果某个 operation 的
+            # 全部 thought 都被跳过，后续 Aggregate/KeepBest 可能只能拿到 [SKIP]。
+            selected_count = selected_thought_counts.get(operation_index, 0)
+            total_count = thought_candidate_counts.get(operation_index, 0)
+            if total_count > 0 and selected_count >= total_count - 1:
+                item["skip_exclusion_reason"] = (
+                    "keep_at_least_one_thought_candidate_per_operation"
+                )
+                continue
+            selected_thought_counts[operation_index] = selected_count + 1
+        selected.append(item)
     skip_thought_indices: Dict[int, set] = {}
     skip_refine_indices: Dict[int, set] = {}
     for item in selected:
@@ -234,6 +274,7 @@ def write_candidate_ranking(
     fieldnames = [
         "rank",
         "selected_for_skip",
+        "skip_exclusion_reason",
         "candidate_type",
         "node_label",
         "operation_index",

@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import traceback
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -610,6 +611,51 @@ def aggregate_batch_summary(
     }
 
 
+def failed_case_summary(
+    task: TaskSpec,
+    case: Case,
+    args: argparse.Namespace,
+    run_root: str,
+    error: Exception,
+) -> Dict[str, Any]:
+    case_dir = os.path.join(run_root, task.name, f"id{case['id']}")
+    os.makedirs(case_dir, exist_ok=True)
+    error_path = os.path.join(case_dir, "error.log")
+    with open(error_path, "w", encoding="utf-8") as f:
+        f.write(traceback.format_exc())
+    return {
+        "task": task.name,
+        "method": task.method_name,
+        "case_id": case["id"],
+        "model_name": args.model_name,
+        "entropy_field": args.entropy_field,
+        "skip_ratio": args.skip_ratio,
+        "skip_order": None,
+        "failed": True,
+        "error": str(error),
+        "key_metrics": {
+            "full_solved": None,
+            "compressed_solved": None,
+            "total_tokens_saved": 0.0,
+            "total_token_reduction": 0.0,
+            "api_calls_saved": 0.0,
+            "api_call_reduction": 0.0,
+            "cost_saved": 0.0,
+            "cost_reduction": 0.0,
+            "latency_seconds_saved": 0.0,
+            "latency_reduction": 0.0,
+        },
+        "full": {"solved": None},
+        "compressed": {"solved": None},
+        "reductions": {
+            "total_token_reduction": 0.0,
+            "api_call_reduction": 0.0,
+            "cost_reduction": 0.0,
+        },
+        "paths": {"error_log": error_path},
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -670,6 +716,7 @@ def main() -> None:
     task_specs = build_task_specs()
     tasks = selected_tasks(task_specs, args.tasks)
     data_ids = parse_ids(args.data_ids)
+    max_cases = None if data_ids is not None else args.max_cases
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_root = os.path.join(
         args.output_dir,
@@ -688,10 +735,15 @@ def main() -> None:
 
     all_summaries: List[Dict[str, Any]] = []
     for task in tasks:
-        cases = task.load_cases(data_ids, args.max_cases)
+        cases = task.load_cases(data_ids, max_cases)
         for case in cases:
             print(f"Running {task.name} id={case['id']}")
-            all_summaries.extend(run_case_orders(task, case, args, run_root))
+            try:
+                all_summaries.extend(run_case_orders(task, case, args, run_root))
+            except Exception as error:
+                all_summaries.append(
+                    failed_case_summary(task, case, args, run_root, error)
+                )
 
     batch_summary_path = os.path.join(run_root, "batch_summary.json")
     batch_summary = aggregate_batch_summary(

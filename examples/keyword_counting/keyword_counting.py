@@ -13,6 +13,7 @@ import logging
 import datetime
 import json
 import csv
+import re
 from collections import Counter
 from functools import partial
 from typing import Dict, List, Callable, Union
@@ -810,17 +811,72 @@ class KeywordCountingParser(parser.Parser):
         text = text.strip()
         if "Output:" in text:
             text = text[text.index("Output:") + len("Output:") :].strip()
-        # 查找最后一个 "{" 和 "}"，只保留包括括号在内的中间文本
-        start = text.rfind("{")
-        end = text.rfind("}")
-        if start == -1 or end == -1:
-            return "{}"
-        text = text[start : end + 1]
+        decoder = json.JSONDecoder()
+        for match in re.finditer(r"\{", text):
+            candidate = text[match.start() :]
+            try:
+                parsed, _ = decoder.raw_decode(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return json.dumps(parsed, ensure_ascii=False)
+
+        if re.search(r'"(?:Paragraph|Sentence)\s+\d+"\s*:', text):
+            candidate = "{" + text.strip().strip(",") + "}"
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return json.dumps(parsed, ensure_ascii=False)
+            except json.JSONDecodeError:
+                pass
+
         try:
             json.loads(text)
             return text
-        except:
+        except json.JSONDecodeError:
             return "{}"
+
+    def fallback_split_text(self, state: Dict) -> Dict[str, str]:
+        """模型没有返回合法 split JSON 时，用本地规则保底切分文本。"""
+
+        method = state.get("method", "")
+        text = state.get("original", "")
+        if method == "gotx":
+            sentences = [
+                item.strip()
+                for item in re.split(r"(?<=[.!?])\s+", text)
+                if item.strip()
+            ]
+            return {
+                f"Sentence {index}": sentence
+                for index, sentence in enumerate(sentences, start=1)
+            }
+
+        num_parts = 8 if method == "got8" else 4
+        sentences = [
+            item.strip()
+            for item in re.split(r"(?<=[.!?])\s+", text)
+            if item.strip()
+        ]
+        if not sentences:
+            words = text.split()
+            chunk_size = max(1, (len(words) + num_parts - 1) // num_parts)
+            chunks = [
+                " ".join(words[index : index + chunk_size])
+                for index in range(0, len(words), chunk_size)
+            ]
+        else:
+            chunk_size = max(1, (len(sentences) + num_parts - 1) // num_parts)
+            chunks = [
+                " ".join(sentences[index : index + chunk_size])
+                for index in range(0, len(sentences), chunk_size)
+            ]
+        while len(chunks) < num_parts:
+            chunks.append("")
+        return {
+            f"Paragraph {index}": chunk
+            for index, chunk in enumerate(chunks[:num_parts], start=1)
+        }
 
     def parse_aggregation_answer(
         self, states: List[Dict], texts: List[str]
@@ -898,9 +954,14 @@ class KeywordCountingParser(parser.Parser):
                 ):
                     answer = self.strip_answer_json(text)
                     json_dict = json.loads(answer)
-                    if len(json_dict.keys()) != 4 or len(json_dict.keys()) != 8:
+                    if len(json_dict.keys()) not in (4, 8, 32):
                         logging.warning(
-                            f"Expected 4 or 8 paragraphs in json, but found {len(json_dict.keys())}."
+                            f"Expected 4/8 paragraphs or 32 sentences in json, but found {len(json_dict.keys())}."
+                        )
+                    if len(json_dict.keys()) == 0:
+                        json_dict = self.fallback_split_text(state)
+                        logging.warning(
+                            "Using local fallback split for keyword_counting initial GoT split."
                         )
                     for key, value in json_dict.items():
                         if "Paragraph" not in key and "Sentence" not in key:
