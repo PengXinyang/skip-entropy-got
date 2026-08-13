@@ -1,6 +1,7 @@
 import argparse
 import csv
 import datetime
+import glob
 import json
 import math
 import os
@@ -298,8 +299,21 @@ def summarize_random_trials(trials: List[Dict[str, Any]]) -> Dict[str, Any]:
 def full_graph_path(input_run_root: Optional[str], task_name: str, case_id: int) -> Optional[str]:
     if not input_run_root:
         return None
-    path = os.path.join(input_run_root, task_name, f"id{case_id}", "full_graph.json")
-    return path if os.path.exists(path) else None
+    candidate_paths = [
+        os.path.join(input_run_root, f"id{case_id}", "full_graph.json"),
+        os.path.join(input_run_root, task_name, f"id{case_id}", "full_graph.json"),
+    ]
+    task_run_pattern = os.path.join(
+        input_run_root,
+        f"{task_name}_skip*",
+        f"id{case_id}",
+        "full_graph.json",
+    )
+    candidate_paths.extend(sorted(glob.glob(task_run_pattern), reverse=True))
+    for path in candidate_paths:
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def run_case(
@@ -308,7 +322,7 @@ def run_case(
     args: argparse.Namespace,
     run_root: str,
 ) -> Dict[str, Any]:
-    case_dir = os.path.join(run_root, task.name, f"id{case['id']}")
+    case_dir = os.path.join(run_root, f"id{case['id']}")
     os.makedirs(case_dir, exist_ok=True)
 
     reused_full_path = full_graph_path(args.input_run_root, task.name, case["id"])
@@ -511,23 +525,24 @@ def main() -> None:
     data_ids = parse_ids(args.data_ids)
     max_cases = None if data_ids is not None else args.max_cases
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    run_root = os.path.join(
-        args.output_dir,
-        f"{args.model_name}_random{args.random_trials}_skip{args.skip_ratio}_{timestamp}",
-    )
-    os.makedirs(run_root, exist_ok=True)
 
-    case_results = []
     for task in tasks:
+        run_root = os.path.join(
+            args.output_dir,
+            f"{task.name}_skip{args.skip_ratio}_{timestamp}",
+        )
+        os.makedirs(run_root, exist_ok=True)
+
+        case_results = []
         cases = task.load_cases(data_ids, max_cases)
         for case in cases:
             print(f"Running entropy_analysis {task.name} id={case['id']}")
             case_results.append(run_case(task, case, args, run_root))
 
-    summary = aggregate_case_results(case_results, run_root)
-    summary_path = os.path.join(run_root, "entropy_analysis_summary.json")
-    with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
+        summary = aggregate_case_results(case_results, run_root)
+        summary_path = os.path.join(run_root, "entropy_analysis_summary.json")
+        with open(summary_path, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__":

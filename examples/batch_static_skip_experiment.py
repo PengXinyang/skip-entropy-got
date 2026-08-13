@@ -491,7 +491,7 @@ def run_case_orders(
     args: argparse.Namespace,
     run_root: str,
 ) -> List[Dict[str, Any]]:
-    case_dir = os.path.join(run_root, task.name, f"id{case['id']}")
+    case_dir = os.path.join(run_root, f"id{case['id']}")
     os.makedirs(case_dir, exist_ok=True)
 
     full_path = os.path.join(case_dir, "full_graph.json")
@@ -618,7 +618,7 @@ def failed_case_summary(
     run_root: str,
     error: Exception,
 ) -> Dict[str, Any]:
-    case_dir = os.path.join(run_root, task.name, f"id{case['id']}")
+    case_dir = os.path.join(run_root, f"id{case['id']}")
     os.makedirs(case_dir, exist_ok=True)
     error_path = os.path.join(case_dir, "error.log")
     with open(error_path, "w", encoding="utf-8") as f:
@@ -718,40 +718,38 @@ def main() -> None:
     data_ids = parse_ids(args.data_ids)
     max_cases = None if data_ids is not None else args.max_cases
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    run_root = os.path.join(
-        args.output_dir,
-        (
-            f"{args.model_name}_skip{args.skip_ratio}_"
-            f"{args.entropy_field}_{timestamp}"
-        ),
-    )
-    os.makedirs(run_root, exist_ok=True)
-    logging.basicConfig(
-        filename=os.path.join(run_root, "run.log"),
-        filemode="w",
-        level=logging.WARNING,
-        force=True,
-    )
 
-    all_summaries: List[Dict[str, Any]] = []
     for task in tasks:
+        run_root = os.path.join(
+            args.output_dir,
+            f"{task.name}_skip{args.skip_ratio}_{timestamp}",
+        )
+        os.makedirs(run_root, exist_ok=True)
+        logging.basicConfig(
+            filename=os.path.join(run_root, "run.log"),
+            filemode="w",
+            level=logging.WARNING,
+            force=True,
+        )
+
+        task_summaries: List[Dict[str, Any]] = []
         cases = task.load_cases(data_ids, max_cases)
         for case in cases:
             print(f"Running {task.name} id={case['id']}")
             try:
-                all_summaries.extend(run_case_orders(task, case, args, run_root))
+                task_summaries.extend(run_case_orders(task, case, args, run_root))
             except Exception as error:
-                all_summaries.append(
+                task_summaries.append(
                     failed_case_summary(task, case, args, run_root, error)
                 )
 
-    batch_summary_path = os.path.join(run_root, "batch_summary.json")
-    batch_summary = aggregate_batch_summary(
-        all_summaries,
-        {"run_root": run_root, "batch_summary": batch_summary_path},
-    )
-    with open(batch_summary_path, "w", encoding="utf-8") as f:
-        json.dump(batch_summary, f, indent=2)
+        batch_summary_path = os.path.join(run_root, "batch_summary.json")
+        batch_summary = aggregate_batch_summary(
+            task_summaries,
+            {"run_root": run_root, "batch_summary": batch_summary_path},
+        )
+        with open(batch_summary_path, "w", encoding="utf-8") as f:
+            json.dump(batch_summary, f, indent=2)
 
 
 if __name__ == "__main__":
