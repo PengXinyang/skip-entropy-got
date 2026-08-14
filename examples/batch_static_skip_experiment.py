@@ -255,6 +255,8 @@ def case_summary(
 ) -> Dict[str, Any]:
     full_tokens = token_summary(full_json)
     compressed_tokens = token_summary(compressed_json)
+    full_quality_flags = graph_quality_flags(full_json)
+    compressed_quality_flags = graph_quality_flags(compressed_json)
     skipped_thoughts = sum(len(items) for items in skip_thought_indices.values())
     skipped_refines = sum(len(items) for items in skip_refine_indices.values())
     full_solved = final_solved(full_json) if task.has_ground_truth else None
@@ -317,6 +319,8 @@ def case_summary(
         "num_skipped_thoughts": skipped_thoughts,
         "num_skipped_refines": skipped_refines,
         "key_metrics": key_metrics,
+        "full_quality_flags": full_quality_flags,
+        "compressed_quality_flags": compressed_quality_flags,
         "full": {
             "solved": full_solved,
             **full_tokens,
@@ -354,6 +358,98 @@ def case_summary(
         },
         "paths": paths,
     }
+
+
+def _is_empty_or_skip_current(value: Any) -> Tuple[bool, bool]:
+    if not isinstance(value, str):
+        return False, False
+    stripped = value.strip()
+    return stripped == "", stripped == "[SKIP]"
+
+
+def _has_complete_tag(text: str, tag: str) -> bool:
+    return f"<{tag}>" in text and f"</{tag}>" in text
+
+
+def graph_quality_flags(graph_json: List[Dict[str, Any]]) -> Dict[str, Any]:
+    flags = {
+        "num_empty_current_thoughts": 0,
+        "num_skip_current_thoughts": 0,
+        "num_keep_best_selected_empty_thoughts": 0,
+        "num_model_empty_responses": 0,
+        "num_generation_or_aggregation_finish_length": 0,
+        "num_generation_or_aggregation_missing_merged_tag": 0,
+        "num_generation_or_aggregation_incomplete_merged_tag": 0,
+        "num_score_calls_skipped_for_empty_current": 0,
+        "num_score_response_empty": 0,
+        "num_score_finish_length": 0,
+        "num_score_missing_redundancy_or_retained_tag": 0,
+        "final_output_empty": None,
+        "final_output_is_skip": None,
+        "final_output_length": None,
+    }
+
+    final_current = None
+    for record in graph_json:
+        if not isinstance(record, dict) or "thoughts" not in record:
+            continue
+
+        operation = record.get("operation")
+        thoughts = record.get("thoughts") or []
+        for thought in thoughts:
+            current = thought.get("current") if isinstance(thought, dict) else None
+            is_empty, is_skip = _is_empty_or_skip_current(current)
+            if is_empty:
+                flags["num_empty_current_thoughts"] += 1
+                if operation == "keep_best_n":
+                    flags["num_keep_best_selected_empty_thoughts"] += 1
+            if is_skip:
+                flags["num_skip_current_thoughts"] += 1
+            final_current = current
+
+        for metadata in record.get("thought_metadata") or []:
+            if not isinstance(metadata, dict):
+                continue
+
+            role = metadata.get("prompt_role") or metadata.get("operation_type")
+            response_text = metadata.get("response_text")
+            response_text = response_text if isinstance(response_text, str) else ""
+            if role in ("generate", "aggregate", "score") and response_text.strip() == "":
+                flags["num_model_empty_responses"] += 1
+
+            if role in ("generate", "aggregate"):
+                if metadata.get("finish_reason") == "length":
+                    flags["num_generation_or_aggregation_finish_length"] += 1
+                has_start = "<Merged>" in response_text
+                has_end = "</Merged>" in response_text
+                if response_text.strip() == "" or (not has_start and not has_end):
+                    flags["num_generation_or_aggregation_missing_merged_tag"] += 1
+                elif has_start != has_end:
+                    flags["num_generation_or_aggregation_incomplete_merged_tag"] += 1
+
+            score_observation = metadata.get("score_observation")
+            if isinstance(score_observation, dict):
+                if score_observation.get("skipped_score_call"):
+                    flags["num_score_calls_skipped_for_empty_current"] += 1
+                    continue
+
+                score_text = score_observation.get("response_text")
+                score_text = score_text if isinstance(score_text, str) else ""
+                if score_text.strip() == "":
+                    flags["num_score_response_empty"] += 1
+                if score_observation.get("finish_reason") == "length":
+                    flags["num_score_finish_length"] += 1
+                if not (
+                    _has_complete_tag(score_text, "Redundancy")
+                    and _has_complete_tag(score_text, "Retained")
+                ):
+                    flags["num_score_missing_redundancy_or_retained_tag"] += 1
+
+    final_empty, final_skip = _is_empty_or_skip_current(final_current)
+    flags["final_output_empty"] = final_empty
+    flags["final_output_is_skip"] = final_skip
+    flags["final_output_length"] = len(final_current) if isinstance(final_current, str) else None
+    return flags
 
 
 def build_task_specs() -> Dict[str, TaskSpec]:

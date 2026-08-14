@@ -404,6 +404,29 @@ class Score(Operation):
                     )
                     score = self.scoring_function(thought.state)
                 else:
+                    current = thought.state.get("current")
+                    is_doc_merge_state = "documents" in thought.state
+                    if (
+                        is_doc_merge_state
+                        and isinstance(current, str)
+                        and current.strip() in ("", "[SKIP]")
+                    ):
+                        score = -1.0
+                        new_thought.metadata["score_observation"] = {
+                            "skipped_score_call": True,
+                            "reason": "empty_or_skip_current",
+                            "response_text": "",
+                            "finish_reason": None,
+                            "usage": {
+                                "prompt_tokens": 0,
+                                "completion_tokens": 0,
+                                "total_tokens": 0,
+                            },
+                        }
+                        new_thought.score = score
+                        self.thoughts.append(new_thought)
+                        continue
+
                     prompt = prompter.score_prompt([thought.state])
                     self.logger.debug("Prompt for LM: %s", prompt)
 
@@ -1038,6 +1061,11 @@ class KeepBestN(Operation):
         self.higher_is_better: bool = higher_is_better
         self.thoughts: List[Thought] = []
 
+    @staticmethod
+    def _is_empty_or_skip_thought(thought: Thought) -> bool:
+        current = thought.state.get("current")
+        return isinstance(current, str) and current.strip() in ("", "[SKIP]")
+
     def get_best_n(self) -> List[Thought]:
         """
         根据 score 返回前驱中最好的 N 个 thoughts。
@@ -1052,9 +1080,17 @@ class KeepBestN(Operation):
             previous_thought.scored for previous_thought in previous_thoughts
         ), "Not all thoughts have been scored"
 
+        selectable_thoughts = [
+            thought
+            for thought in previous_thoughts
+            if not self._is_empty_or_skip_thought(thought)
+        ]
+        if not selectable_thoughts:
+            selectable_thoughts = previous_thoughts
+
         try:
             return sorted(
-                previous_thoughts,
+                selectable_thoughts,
                 key=lambda thought: thought.score,
                 reverse=self.higher_is_better,
             )[: self.n]
@@ -1068,7 +1104,7 @@ class KeepBestN(Operation):
                 "Scores: %s", [thought.score for thought in previous_thoughts]
             )
             return sorted(
-                [i for i in previous_thoughts if isinstance(i.score, float)],
+                [i for i in selectable_thoughts if isinstance(i.score, float)],
                 key=lambda thought: thought.score,
                 reverse=self.higher_is_better,
             )[: self.n]

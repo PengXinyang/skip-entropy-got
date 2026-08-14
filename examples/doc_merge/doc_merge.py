@@ -23,7 +23,8 @@ class DocMergePrompter(prompter.Prompter):
     继承 Prompter 类并实现其抽象方法。
     """
 
-    merge_doc_prompt_start = """Merge the following {num} NDA documents <Doc1> - <Doc{num}> into a single NDA, maximizing retained information and minimizing redundancy. Output only the created NDA between the tags <Merged> and </Merged>, without any additional text.
+    merge_doc_prompt_start = """Merge the following {num} NDA documents <Doc1> - <Doc{num}> into a single NDA, maximizing retained information and minimizing redundancy.
+Output exactly one non-empty merged NDA. The answer must start with <Merged> and end with </Merged>. Do not omit the closing </Merged> tag. Do not output any text outside these tags.
 Here are NDAs <Doc1> - <Doc{num}>
 """
     merge_doc_prompt_block = """
@@ -33,7 +34,7 @@ Here are NDAs <Doc1> - <Doc{num}>
 """
 
     merge_doc_prompt_cot_start = """Merge the following {num} NDA documents <Doc1> - <Doc{num}> into a single NDA, maximizing retained information and minimizing redundancy.
-You can generate any intermediate thoughts and documents you want, but the final output should be the merged NDA, placed between the two tags <Merged> and </Merged>.
+You can generate any intermediate thoughts and documents you want, but the final output should be a non-empty merged NDA. The final answer must start with <Merged> and end with </Merged>. Do not omit the closing </Merged> tag.
 For instance you might want to follow this approach:
 1. Split each NDA into their logical subparts.
 2. Merge the subparts of the {num} NDAs.
@@ -44,7 +45,8 @@ Here are NDAs <Doc1> - <Doc{num}>:
 """
 
     improve_summary_prompt_start = """The following NDA <S> merges initial NDAs <Doc1> - <Doc{num}>.
-Please improve the summary NDA <S> by adding more information and removing redundancy. Output only the improved NDA, placed between the two tags <Merged> and </Merged>, without any additional text.
+Please improve the summary NDA <S> by adding more information and removing redundancy.
+Output exactly one non-empty improved NDA. The answer must start with <Merged> and end with </Merged>. Do not omit the closing </Merged> tag. Do not output any text outside these tags.
 
 Here are NDAs <Doc1> - <Doc{num}>:
 """
@@ -66,7 +68,10 @@ Here is the summary NDA <S>:
 Please score the merged NDA <S> in terms of how much redundant information is contained, independent of the original NDAs, as well as how much information is retained from the original NDAs.
 A score of 10 for redundancy implies that absolutely no information is redundant, while a score of 0 implies that at least half of the information is redundant (so everything is at least mentioned twice).
 A score of 10 for retained information implies that all information from the original NDAs is retained, while a score of 0 implies that no information is retained.
-You may provide reasoning for your scoring, but the final score for redundancy should be between the tags <Redundancy> and </Redundancy>, and the final score for retained information should be between the tags <Retained> and </Retained>, without any additional text within any of those tags.
+The first two lines of your answer must be exactly in this format:
+<Redundancy>NUMBER</Redundancy>
+<Retained>NUMBER</Retained>
+If you provide reasoning, put it after those two lines. Do not put any additional text inside the tags.
 
 Here are NDAs <Doc1> - <Doc{num}>:
 """
@@ -86,7 +91,7 @@ Here is the summary NDA <S>:
 
     aggregate_full_prompt_base = """The following NDAs <S1> - <S{num_ndas_summary}> each merge the initial NDAs <Doc1> - <Doc{num_ndas}>.
 Combine the merged NDAs <S1> - <S{num_ndas_summary}> into a new one, maximizing their advantages and overall information retention, while minimizing redundancy.
-Output only the new NDA between the tags <Merged> and </Merged>, without any additional text.   
+Output exactly one non-empty new NDA. The answer must start with <Merged> and end with </Merged>. Do not omit the closing </Merged> tag. Do not output any text outside these tags.
 
 Here are the original NDAs <Doc1> - <Doc{num_ndas}>:
 """
@@ -108,7 +113,7 @@ Here are the summary NDAs <S1> - <S{num_ndas_summary}>:
 
     aggregate_sub_prompt_base = """The following NDAs <S1> - <S{num_ndas}> are summaries of some other NDAs.
 Combine them into a new one, make sure to maximize their advantages and overall information retention, while minimizing redundancy.
-Output only the new NDA between the tags <Merged> and </Merged>, without any additional text.
+Output exactly one non-empty new NDA. The answer must start with <Merged> and end with </Merged>. Do not omit the closing </Merged> tag. Do not output any text outside these tags.
 
 Here are NDAs <S1> - <S{num_ndas}>:
 """
@@ -389,6 +394,13 @@ class DocMergeParser(parser.Parser):
         """
         assert len(states) == 1, "Only one state is allowed for scoring."
         if len(states) == 1:
+            current = str(states[0].get("current") or "").strip()
+            if current == "" or current == "[SKIP]":
+                logging.warning(
+                    "Skipping score parsing for an empty or skipped doc_merge state. Returning -1.0."
+                )
+                return [-1.0]
+
             # 完整 NDA 聚合
             redundancy_scores = []
             retain_scores = []
@@ -421,11 +433,13 @@ class DocMergeParser(parser.Parser):
                     )
             if len(redundancy_scores) == 0 or len(retain_scores) == 0:
                 logging.warning(
-                    f"Could not find any valid score in any answer. Returning 0.0."
+                    "Could not find any valid score in any non-empty answer. Returning 0.0."
                 )
                 return [0.0]
             mean_redundancy = fmean(redundancy_scores)
             mean_retain = fmean(retain_scores)
+            if mean_redundancy + mean_retain == 0:
+                return [0.0]
             f1 = 2 * mean_redundancy * mean_retain / (mean_redundancy + mean_retain)
             return [f1]
 
