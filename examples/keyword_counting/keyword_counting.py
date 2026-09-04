@@ -39,9 +39,12 @@ def list_to_freq_dict(lst: List[str]) -> Dict[str, int]:
 def valid_aggregation(state: Dict) -> bool:
     """判断两个中间解的聚合结果是否有效的辅助函数。"""
 
-    aggr1 = json.loads(state["aggr1"])
-    aggr2 = json.loads(state["aggr2"])
-    current = json.loads(state["current"])
+    try:
+        aggr1 = json.loads(state["aggr1"])
+        aggr2 = json.loads(state["aggr2"])
+        current = json.loads(state["current"])
+    except (KeyError, TypeError, json.JSONDecodeError):
+        return False
 
     if set(aggr1.keys()) | set(aggr2.keys()) != set(current.keys()):
         return False
@@ -877,6 +880,34 @@ class KeywordCountingParser(parser.Parser):
             f"Paragraph {index}": chunk
             for index, chunk in enumerate(chunks[:num_parts], start=1)
         }
+
+    def build_skipped_aggregation_state(
+        self,
+        base_state: Dict,
+        states: List[Dict],
+        skip_marker: str,
+    ) -> Dict:
+        """
+        keyword_counting 的 aggregate 结果需要保留两个输入字典。
+        即使跳过 LLM 聚合调用，也要保留 aggr1/aggr2，供后续校验和 improve 使用。
+        """
+
+        if len(states) == 0:
+            states = [
+                {"current": "{}", "sub_text": ""},
+                {"current": "{}", "sub_text": ""},
+            ]
+        elif len(states) == 1:
+            states = [states[0], {"current": "{}", "sub_text": ""}]
+
+        new_state = dict(base_state or {})
+        new_state["sub_text"] = (
+            states[0].get("sub_text", "") + states[1].get("sub_text", "")
+        )
+        new_state["current"] = skip_marker
+        new_state["aggr1"] = states[0].get("current", "{}")
+        new_state["aggr2"] = states[1].get("current", "{}")
+        return new_state
 
     def parse_aggregation_answer(
         self, states: List[Dict], texts: List[str]

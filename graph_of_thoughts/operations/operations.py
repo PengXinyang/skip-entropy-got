@@ -984,9 +984,16 @@ class Aggregate(Operation):
             for response_index in range(self.num_responses):
                 thought_index = len(self.thoughts)
                 if thought_index in self.skip_thought_indices:
+                    skipped_base_state = dict(base_state or {})
+                    if hasattr(parser, "build_skipped_aggregation_state"):
+                        skipped_base_state = parser.build_skipped_aggregation_state(
+                            skipped_base_state,
+                            previous_thought_states,
+                            self.skip_marker,
+                        )
                     self.thoughts.append(
                         _create_skipped_thought(
-                            base_state,
+                            skipped_base_state,
                             self,
                             thought_index,
                             self.skip_marker,

@@ -203,7 +203,9 @@ def make_jsonable(value: Any) -> Any:
 
 def sanitize_graph_for_json(graph: Any) -> None:
     for operation in graph.operations:
-        for thought in operation.thoughts:
+        # ValidateAndImprove 内部保存的是 List[List[Thought]]，但对外输出应使用
+        # get_thoughts() 取得每个输入 thought 的最终版本，避免把中间尝试列表当成 Thought。
+        for thought in operation.get_thoughts():
             thought.state = make_jsonable(thought.state)
             thought.metadata = make_jsonable(thought.metadata)
 
