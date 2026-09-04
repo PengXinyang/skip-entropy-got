@@ -23,6 +23,8 @@ pip-log.txt
 # Data
 results/
 examples/static_skip_results/
+examples/batch_static_skip_results/
+examples/entropy_analysis_results/
 *.out
 *.err
 

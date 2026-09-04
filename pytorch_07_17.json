@@ -1,0 +1,84 @@
+{
+  "version": "20260707",
+  "type": "pytorch",
+  "data": {
+    "jobName": "DeepSeek-R1-Distill-Qwen-32B",
+    "ps": {
+      "taskName": "master",
+      "replicas": 1,
+      "resource": {
+        "cpu": 16,
+        "gpu": {
+          "count": 4,
+          "model": "nvidia.com/v100"
+        },
+        "memory": 32,
+        "rdma": true,
+        "network": {
+          "enabled": true,
+          "model": "rdma/rdma_v100"
+        },
+        "vgpu": {
+          "enabled": false
+        }
+      },
+      "image": {
+        "imageLink": "gpu-harbor.act.buaa.edu.cn/user-liyilong/envd-vllm:0.8.3-cu12.4-rdma-v1",
+        "archs": [
+          "linux/amd64"
+        ]
+      },
+      "command": "ray start --head --port=6667 --disable-usage-stats;\nNCCL_DEBUG=TRACE python3 -m vllm.entrypoints.openai.api_server \\\n--model=/models/DeepSeek-R1-Distill-Qwen-32B \\\n--max-model-len 32768 \\\n--tensor-parallel-size 4 \\\n--pipeline-parallel-size 2 \\\n--gpu-memory-utilization 0.90 \\\n--max-num-seqs 128 \\\n--trust-remote-code \\\n--disable-custom-all-reduce \\\n--port 8000 \\\n--dtype=half;",
+      "workingDir": "/models",
+      "ports": []
+    },
+    "worker": {
+      "taskName": "worker",
+      "replicas": 1,
+      "resource": {
+        "cpu": 16,
+        "gpu": {
+          "count": 4,
+          "model": "nvidia.com/v100"
+        },
+        "memory": 32,
+        "rdma": true,
+        "network": {
+          "enabled": true,
+          "model": "rdma/rdma_v100"
+        },
+        "vgpu": {
+          "enabled": false
+        }
+      },
+      "image": {
+        "imageLink": "gpu-harbor.act.buaa.edu.cn/user-liyilong/envd-vllm:0.8.3-cu12.4-rdma-v1",
+        "archs": [
+          "linux/amd64"
+        ]
+      },
+      "command": "sleep 5; # wait 5s for ip loading\nray start --address=\"$MASTER_ADDR:6667\";\nsleep inf;",
+      "workingDir": "/models",
+      "ports": []
+    },
+    "envs": [],
+    "volumeMounts": [
+      {
+        "type": 2,
+        "subPath": "82",
+        "datasetID": 82,
+        "mountPath": "/models/DeepSeek-R1-Distill-Qwen-32B"
+      }
+    ],
+    "observability": {
+      "tbEnable": false
+    },
+    "alertEnabled": true,
+    "nodeSelector": {
+      "enable": false,
+      "mode": "include",
+      "nodes": []
+    },
+    "forwards": []
+  }
+}
