@@ -59,6 +59,45 @@ def _operation_by_id(graph_json: List[Dict[str, Any]]) -> Dict[Any, Dict[str, An
     }
 
 
+def next_keep_best_n_by_operation(
+    graph_json: List[Dict[str, Any]]
+) -> Dict[int, int]:
+    records_by_id = _operation_by_id(graph_json)
+    result: Dict[int, int] = {}
+    for record in graph_json:
+        if not isinstance(record, dict) or "operation" not in record:
+            continue
+        operation_index = record.get("operation_index")
+        queue = list(record.get("successors", []) or [])
+        visited = set()
+        while queue:
+            successor_id = queue.pop(0)
+            if successor_id in visited:
+                continue
+            visited.add(successor_id)
+            successor = records_by_id.get(successor_id)
+            if not successor:
+                continue
+            if successor.get("operation") == "keep_best_n":
+                result[operation_index] = max(
+                    1,
+                    len(successor.get("thoughts", []) or []),
+                )
+                break
+            queue.extend(successor.get("successors", []) or [])
+    return result
+
+
+def min_remaining_candidates_for_operation(
+    operation: str,
+    operation_index: int,
+    keep_best_n_by_operation: Dict[int, int],
+) -> int:
+    if operation == "aggregate":
+        return max(1, keep_best_n_by_operation.get(operation_index, 1))
+    return 1
+
+
 def _predecessor_outputs(
     record: Dict[str, Any],
     operations_by_id: Dict[Any, Dict[str, Any]],
@@ -102,6 +141,7 @@ def collect_thought_judge_candidates(
     """
     allowed_operations = set(include_operations or JUDGE_SKIPPABLE_OPERATIONS)
     operations_by_id = _operation_by_id(graph_json)
+    keep_best_n_by_operation = next_keep_best_n_by_operation(graph_json)
     final_output = _find_final_output(graph_json)
     candidates: List[Dict[str, Any]] = []
 
@@ -136,6 +176,11 @@ def collect_thought_judge_candidates(
                 "operation_index": record.get("operation_index"),
                 "operation": operation,
                 "thought_index": thought_index,
+                "min_remaining_candidates": min_remaining_candidates_for_operation(
+                    operation,
+                    record.get("operation_index"),
+                    keep_best_n_by_operation,
+                ),
                 "predecessors": record.get("predecessors", []),
                 "successors": record.get("successors", []),
                 "score": (
@@ -310,12 +355,78 @@ def judge_summary(results: List[JudgeResult]) -> Dict[str, Any]:
     return summary
 
 
+def select_judge_skip_recommendations(
+    results: List[JudgeResult],
+    skip_ratio: float,
+) -> List[Dict[str, Any]]:
+    rows = [result.to_dict() for result in results]
+    candidate_counts: Dict[Any, int] = {}
+    for row in rows:
+        operation_index = row.get("operation_index")
+        candidate_counts[operation_index] = candidate_counts.get(operation_index, 0) + 1
+
+    skippable_rows = []
+    for row in rows:
+        operation_index = row.get("operation_index")
+        min_remaining = int(row.get("min_remaining_candidates") or 1)
+        if candidate_counts.get(operation_index, 0) <= min_remaining:
+            row["judge_skip_exclusion_reason"] = (
+                "not_enough_candidates_after_min_remaining_constraint"
+            )
+            continue
+        skippable_rows.append(row)
+
+    def sort_key(row: Dict[str, Any]) -> tuple:
+        judge = row.get("judge", {})
+        skip_risk = judge.get("skip_risk")
+        usefulness = judge.get("usefulness")
+        contribution = judge.get("final_answer_contribution")
+        redundancy = judge.get("redundancy")
+        return (
+            skip_risk if isinstance(skip_risk, (int, float)) else 1.0,
+            usefulness if isinstance(usefulness, (int, float)) else 1.0,
+            contribution if isinstance(contribution, (int, float)) else 1.0,
+            -(redundancy if isinstance(redundancy, (int, float)) else 0.0),
+        )
+
+    skippable_rows.sort(key=sort_key)
+    num_to_skip = int(len(skippable_rows) * skip_ratio)
+    selected_counts: Dict[Any, int] = {}
+    selected_keys = set()
+    ranked_rows = []
+
+    for rank, row in enumerate(skippable_rows, start=1):
+        row = dict(row)
+        row["judge_skip_rank"] = rank
+        operation_index = row.get("operation_index")
+        selected_count = selected_counts.get(operation_index, 0)
+        total_count = candidate_counts.get(operation_index, 0)
+        min_remaining = int(row.get("min_remaining_candidates") or 1)
+        can_select = selected_count < total_count - min_remaining
+        if len(selected_keys) < num_to_skip and can_select:
+            row["selected_for_judge_skip"] = True
+            selected_counts[operation_index] = selected_count + 1
+            selected_keys.add((operation_index, row.get("thought_index")))
+        else:
+            row["selected_for_judge_skip"] = False
+            if not can_select:
+                row["judge_skip_exclusion_reason"] = (
+                    "keep_required_thought_candidates_per_operation"
+                )
+        ranked_rows.append(row)
+
+    return ranked_rows
+
+
 def write_judge_outputs(
     results: List[JudgeResult],
     *,
     json_path: str,
     csv_path: str,
     summary_path: str,
+    recommendations_json_path: Optional[str] = None,
+    recommendations_csv_path: Optional[str] = None,
+    skip_ratio: Optional[float] = None,
 ) -> None:
     rows = [result.to_dict() for result in results]
     with open(json_path, "w", encoding="utf-8") as f:
@@ -327,6 +438,7 @@ def write_judge_outputs(
         "operation_id",
         "operation",
         "thought_index",
+        "min_remaining_candidates",
         "entropy",
         "avg_entropy_bits",
         "normalized_avg_entropy_bits",
@@ -353,6 +465,9 @@ def write_judge_outputs(
                     "operation_id": row.get("operation_id"),
                     "operation": row.get("operation"),
                     "thought_index": row.get("thought_index"),
+                    "min_remaining_candidates": row.get(
+                        "min_remaining_candidates"
+                    ),
                     "entropy": row.get("entropy"),
                     "avg_entropy_bits": row.get("avg_entropy_bits"),
                     "normalized_avg_entropy_bits": row.get(
@@ -376,4 +491,83 @@ def write_judge_outputs(
             )
 
     with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump(judge_summary(results), f, indent=2, ensure_ascii=False)
+        summary = judge_summary(results)
+        if (
+            recommendations_json_path
+            and recommendations_csv_path
+            and isinstance(skip_ratio, (int, float))
+        ):
+            recommendations = select_judge_skip_recommendations(results, skip_ratio)
+            summary["judge_skip_ratio"] = skip_ratio
+            summary["num_judge_skip_candidates"] = len(recommendations)
+            summary["num_selected_for_judge_skip"] = sum(
+                1 for row in recommendations if row.get("selected_for_judge_skip")
+            )
+            with open(recommendations_json_path, "w", encoding="utf-8") as rec_json:
+                json.dump(recommendations, rec_json, indent=2, ensure_ascii=False)
+
+            recommendation_fields = [
+                "judge_skip_rank",
+                "selected_for_judge_skip",
+                "judge_skip_exclusion_reason",
+                "node_label",
+                "operation_index",
+                "operation_id",
+                "operation",
+                "thought_index",
+                "min_remaining_candidates",
+                "entropy",
+                "score",
+                "task_relevance",
+                "input_output_consistency",
+                "final_answer_contribution",
+                "redundancy",
+                "skip_risk",
+                "usefulness",
+                "reason",
+                "thought_current",
+            ]
+            with open(
+                recommendations_csv_path,
+                "w",
+                newline="",
+                encoding="utf-8",
+            ) as rec_csv:
+                writer = csv.DictWriter(rec_csv, fieldnames=recommendation_fields)
+                writer.writeheader()
+                for row in recommendations:
+                    judge = row.get("judge", {})
+                    writer.writerow(
+                        {
+                            "judge_skip_rank": row.get("judge_skip_rank"),
+                            "selected_for_judge_skip": row.get(
+                                "selected_for_judge_skip"
+                            ),
+                            "judge_skip_exclusion_reason": row.get(
+                                "judge_skip_exclusion_reason"
+                            ),
+                            "node_label": row.get("node_label"),
+                            "operation_index": row.get("operation_index"),
+                            "operation_id": row.get("operation_id"),
+                            "operation": row.get("operation"),
+                            "thought_index": row.get("thought_index"),
+                            "min_remaining_candidates": row.get(
+                                "min_remaining_candidates"
+                            ),
+                            "entropy": row.get("entropy"),
+                            "score": row.get("score"),
+                            "task_relevance": judge.get("task_relevance"),
+                            "input_output_consistency": judge.get(
+                                "input_output_consistency"
+                            ),
+                            "final_answer_contribution": judge.get(
+                                "final_answer_contribution"
+                            ),
+                            "redundancy": judge.get("redundancy"),
+                            "skip_risk": judge.get("skip_risk"),
+                            "usefulness": judge.get("usefulness"),
+                            "reason": judge.get("reason"),
+                            "thought_current": row.get("thought_current"),
+                        }
+                    )
+        json.dump(summary, f, indent=2, ensure_ascii=False)

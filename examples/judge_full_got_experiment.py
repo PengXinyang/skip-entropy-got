@@ -109,6 +109,14 @@ def run_case_judge(
     judge_json_path = os.path.join(case_dir, "judge_scores.json")
     judge_csv_path = os.path.join(case_dir, "judge_scores.csv")
     judge_summary_path = os.path.join(case_dir, "judge_summary.json")
+    recommendations_json_path = os.path.join(
+        case_dir,
+        "judge_skip_recommendations.json",
+    )
+    recommendations_csv_path = os.path.join(
+        case_dir,
+        "judge_skip_recommendations.csv",
+    )
     error_path = os.path.join(case_dir, "error.log")
 
     full_json = run_full_graph_if_needed(task, case, args, case_dir)
@@ -141,6 +149,9 @@ def run_case_judge(
         json_path=judge_json_path,
         csv_path=judge_csv_path,
         summary_path=judge_summary_path,
+        recommendations_json_path=recommendations_json_path,
+        recommendations_csv_path=recommendations_csv_path,
+        skip_ratio=args.skip_ratio,
     )
 
     tokens = token_summary(full_json)
@@ -158,6 +169,8 @@ def run_case_judge(
             "judge_scores_json": judge_json_path,
             "judge_scores_csv": judge_csv_path,
             "judge_summary": judge_summary_path,
+            "judge_skip_recommendations_json": recommendations_json_path,
+            "judge_skip_recommendations_csv": recommendations_csv_path,
             "error_log": error_path,
         },
     }
@@ -212,6 +225,7 @@ def main() -> None:
     )
     parser.add_argument("--data-ids", default=None)
     parser.add_argument("--max-cases", type=int, default=1)
+    parser.add_argument("--skip-ratio", type=float, default=0.2)
     parser.add_argument("--entropy-field", default="normalized_avg_entropy_bits")
     parser.add_argument("--max-judge-candidates", type=int, default=None)
     parser.add_argument("--include-root", action="store_true")
@@ -246,6 +260,8 @@ def main() -> None:
         raise ValueError("--max-cases must be positive")
     if args.max_judge_candidates is not None and args.max_judge_candidates <= 0:
         raise ValueError("--max-judge-candidates must be positive")
+    if not 0.0 <= args.skip_ratio <= 1.0:
+        raise ValueError("--skip-ratio must be between 0 and 1")
     if args.parallel_workers <= 0:
         raise ValueError("--parallel-workers must be positive")
     if args.full_graph_path and args.input_run_root:

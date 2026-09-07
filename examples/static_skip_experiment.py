@@ -85,6 +85,48 @@ def read_json(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
+def next_keep_best_n_by_operation(
+    full_graph_json: List[Dict[str, Any]]
+) -> Dict[int, int]:
+    records_by_id = {
+        record.get("operation_id"): record
+        for record in full_graph_json
+        if isinstance(record, dict) and "operation_id" in record
+    }
+    result: Dict[int, int] = {}
+    for record in full_graph_json:
+        if not isinstance(record, dict) or "operation" not in record:
+            continue
+        operation_index = record.get("operation_index")
+        queue = list(record.get("successors", []) or [])
+        visited = set()
+        while queue:
+            successor_id = queue.pop(0)
+            if successor_id in visited:
+                continue
+            visited.add(successor_id)
+            successor = records_by_id.get(successor_id)
+            if not successor:
+                continue
+            if successor.get("operation") == "keep_best_n":
+                result[operation_index] = max(
+                    1,
+                    len(successor.get("thoughts", []) or []),
+                )
+                break
+            queue.extend(successor.get("successors", []) or [])
+    return result
+
+
+def min_remaining_candidates_for_item(
+    item: Dict[str, Any],
+    keep_best_n_by_operation: Dict[int, int],
+) -> int:
+    if item.get("operation") == "aggregate":
+        return max(1, keep_best_n_by_operation.get(item["operation_index"], 1))
+    return 1
+
+
 def select_low_entropy_thoughts(
     full_graph_json: List[Dict[str, Any]],
     skip_ratio: float,
@@ -92,6 +134,7 @@ def select_low_entropy_thoughts(
     skip_order: str,
 ) -> Tuple[Dict[int, set], Dict[int, set], List[Dict[str, Any]]]:
     candidates = []
+    keep_best_n_by_operation = next_keep_best_n_by_operation(full_graph_json)
     refine_entropy_field = (
         "refined_normalized_avg_entropy_bits"
         if entropy_field == "normalized_avg_entropy_bits"
@@ -183,15 +226,18 @@ def select_low_entropy_thoughts(
                     "entropy": float(entropy),
                     "ranking_score": float(entropy),
                     "entropy_field": entropy_field,
+                    "min_remaining_candidates": max(
+                        1,
+                        keep_best_n_by_operation.get(record["operation_index"], 1),
+                    )
+                    if operation == "aggregate"
+                    else 1,
                     "thought_preview": str(
                         (thought_state or {}).get("current", "")
                     )[:200],
                 }
             )
 
-    reverse = skip_order == "high"
-    candidates.sort(key=lambda item: item["entropy"], reverse=reverse)
-    num_to_skip = int(len(candidates) * skip_ratio)
     thought_candidate_counts: Dict[int, int] = {}
     refine_candidate_counts: Dict[int, int] = {}
     for item in candidates:
@@ -203,6 +249,49 @@ def select_low_entropy_thoughts(
             thought_candidate_counts[item["operation_index"]] = (
                 thought_candidate_counts.get(item["operation_index"], 0) + 1
             )
+
+    thought_min_remaining: Dict[int, int] = {}
+    for item in candidates:
+        if item["candidate_type"] == "validate_and_improve_refine":
+            continue
+        operation_index = item["operation_index"]
+        thought_min_remaining[operation_index] = max(
+            thought_min_remaining.get(operation_index, 1),
+            min_remaining_candidates_for_item(item, keep_best_n_by_operation),
+        )
+
+    skippable_candidates = []
+    for item in candidates:
+        operation_index = item["operation_index"]
+        min_remaining = min_remaining_candidates_for_item(
+            item,
+            keep_best_n_by_operation,
+        )
+        if item["candidate_type"] == "validate_and_improve_refine":
+            total_count = refine_candidate_counts.get(operation_index, 0)
+            if total_count <= min_remaining:
+                continue
+        else:
+            total_count = thought_candidate_counts.get(operation_index, 0)
+            if total_count <= min_remaining:
+                continue
+        skippable_candidates.append(item)
+
+    candidates = skippable_candidates
+    reverse = skip_order == "high"
+    candidates.sort(key=lambda item: item["entropy"], reverse=reverse)
+    num_to_skip = int(len(candidates) * skip_ratio)
+    max_skippable = sum(
+        count - thought_min_remaining.get(operation_index, 1)
+        for operation_index, count in thought_candidate_counts.items()
+        if count > thought_min_remaining.get(operation_index, 1)
+    ) + sum(count - 1 for count in refine_candidate_counts.values() if count > 1)
+    if num_to_skip > max_skippable:
+        logging.warning(
+            "Cannot skip the requested number of candidates while keeping at "
+            f"least one candidate per operation: requested={num_to_skip}, "
+            f"max_skippable={max_skippable}, candidates={len(candidates)}"
+        )
 
     selected = []
     selected_thought_counts: Dict[int, int] = {}
@@ -226,9 +315,13 @@ def select_low_entropy_thoughts(
             # 全部 thought 都被跳过，后续 Aggregate/KeepBest 可能只能拿到 [SKIP]。
             selected_count = selected_thought_counts.get(operation_index, 0)
             total_count = thought_candidate_counts.get(operation_index, 0)
-            if total_count > 0 and selected_count >= total_count - 1:
+            min_remaining = min_remaining_candidates_for_item(
+                item,
+                keep_best_n_by_operation,
+            )
+            if total_count > 0 and selected_count >= total_count - min_remaining:
                 item["skip_exclusion_reason"] = (
-                    "keep_at_least_one_thought_candidate_per_operation"
+                    "keep_required_thought_candidates_per_operation"
                 )
                 continue
             selected_thought_counts[operation_index] = selected_count + 1
@@ -286,6 +379,7 @@ def write_candidate_ranking(
         "ranking_score",
         "entropy",
         "entropy_field",
+        "min_remaining_candidates",
         "input_entropy_bits",
         "refined_entropy_bits",
         "delta_entropy_bits",
