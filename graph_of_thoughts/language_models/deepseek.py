@@ -156,11 +156,10 @@ class DeepSeek(AbstractLanguageModel):
         :rtype: ChatCompletion
         """
         # OpenAI-compatible 端点常见限制：n 仅支持 1。
-        # 非思考模式下 max_tokens 上限通常为 8192；思考模式下可更高（由模型决定），
-        # 因此只在非思考模式下对 max_tokens 做封顶，避免误伤。
+        # max_tokens 表示本次请求允许模型生成的最大输出 token 数。
+        # 这里不再对非思考模式强制封顶 8192，而是完全遵守 config.json 中的配置。
+        # 注意：输入 token + 输出 token 仍然不能超过模型或服务端实际支持的上下文窗口。
         safe_max_tokens = int(self.max_tokens)
-        if not self.thinking_enabled:
-            safe_max_tokens = min(safe_max_tokens, 8192)
 
         create_kwargs: Dict = {
             "model": self.model_id,
