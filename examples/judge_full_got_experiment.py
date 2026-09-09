@@ -41,6 +41,57 @@ def limit_cases(cases: List[Dict[str, Any]], max_cases: Optional[int]) -> List[D
     return cases[:max_cases]
 
 
+def discover_full_graph_paths(input_run_root: Optional[str]) -> Dict[int, str]:
+    if not input_run_root:
+        return {}
+    input_run_root = os.path.abspath(input_run_root)
+    if os.path.isfile(input_run_root):
+        parent_name = os.path.basename(os.path.dirname(input_run_root))
+        if (
+            os.path.basename(input_run_root) == "full_graph.json"
+            and parent_name.startswith("id")
+            and parent_name[2:].isdigit()
+        ):
+            return {int(parent_name[2:]): input_run_root}
+        return {}
+
+    full_graph_paths: Dict[int, str] = {}
+    if not os.path.isdir(input_run_root):
+        return full_graph_paths
+
+    for current_dir, dirnames, filenames in os.walk(input_run_root):
+        dir_name = os.path.basename(current_dir)
+        if not dir_name.startswith("id") or not dir_name[2:].isdigit():
+            continue
+        if "full_graph.json" not in filenames:
+            continue
+        case_id = int(dir_name[2:])
+        full_graph_paths.setdefault(case_id, os.path.join(current_dir, "full_graph.json"))
+        dirnames[:] = []
+    return full_graph_paths
+
+
+def cases_from_discovered_full_graphs(
+    task: TaskSpec,
+    discovered_paths: Dict[int, str],
+    data_ids: Optional[List[int]],
+    max_cases: Optional[int],
+) -> List[Dict[str, Any]]:
+    selected_ids = sorted(discovered_paths)
+    if data_ids is not None:
+        requested_ids = set(data_ids)
+        selected_ids = [case_id for case_id in selected_ids if case_id in requested_ids]
+    selected_ids = selected_ids[:max_cases] if max_cases is not None else selected_ids
+
+    dataset_cases = {case["id"]: case for case in task.load_cases(None, None)}
+    cases: List[Dict[str, Any]] = []
+    for case_id in selected_ids:
+        case = dict(dataset_cases.get(case_id, {"id": case_id}))
+        case["_full_graph_path"] = discovered_paths[case_id]
+        cases.append(case)
+    return cases
+
+
 def existing_full_graph_path(
     input_run_root: Optional[str],
     task_name: str,
@@ -49,19 +100,25 @@ def existing_full_graph_path(
     if not input_run_root:
         return None
 
-    candidates = [
-        os.path.join(input_run_root, f"id{case_id}", "full_graph.json"),
-        os.path.join(input_run_root, task_name, f"id{case_id}", "full_graph.json"),
-    ]
-    for name in os.listdir(input_run_root) if os.path.isdir(input_run_root) else []:
-        candidates.append(
-            os.path.join(input_run_root, name, f"id{case_id}", "full_graph.json")
-        )
+    discovered = discover_full_graph_paths(input_run_root)
+    if case_id in discovered:
+        return discovered[case_id]
 
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            return candidate
-    return None
+    return discovered.get(case_id)
+
+
+def full_graph_path_for_case(
+    task: TaskSpec,
+    case: Dict[str, Any],
+    args: argparse.Namespace,
+    case_dir: str,
+) -> str:
+    return (
+        case.get("_full_graph_path")
+        or args.full_graph_path
+        or existing_full_graph_path(args.input_run_root, task.name, case["id"])
+        or os.path.join(case_dir, "full_graph.json")
+    )
 
 
 def run_full_graph_if_needed(
@@ -70,12 +127,8 @@ def run_full_graph_if_needed(
     args: argparse.Namespace,
     case_dir: str,
 ) -> List[Dict[str, Any]]:
-    full_graph_path = (
-        args.full_graph_path
-        or existing_full_graph_path(args.input_run_root, task.name, case["id"])
-        or os.path.join(case_dir, "full_graph.json")
-    )
-    if args.full_graph_path or args.input_run_root:
+    full_graph_path = full_graph_path_for_case(task, case, args, case_dir)
+    if args.full_graph_path or args.input_run_root or case.get("_full_graph_path"):
         if not os.path.exists(full_graph_path):
             raise FileNotFoundError(
                 f"Could not find full_graph.json for {task.name} id={case['id']} "
@@ -102,9 +155,7 @@ def run_case_judge(
     os.makedirs(case_dir, exist_ok=True)
 
     full_graph_path = (
-        args.full_graph_path
-        or existing_full_graph_path(args.input_run_root, task.name, case["id"])
-        or os.path.join(case_dir, "full_graph.json")
+        full_graph_path_for_case(task, case, args, case_dir)
     )
     judge_json_path = os.path.join(case_dir, "judge_scores.json")
     judge_csv_path = os.path.join(case_dir, "judge_scores.csv")
@@ -224,7 +275,15 @@ def main() -> None:
         help="Comma-separated task names, for example doc_merge,sorting_128.",
     )
     parser.add_argument("--data-ids", default=None)
-    parser.add_argument("--max-cases", type=int, default=1)
+    parser.add_argument(
+        "--max-cases",
+        type=int,
+        default=None,
+        help=(
+            "Maximum cases to judge. Default: 1 when generating full_graph; "
+            "all discovered cases when --input-run-root is used."
+        ),
+    )
     parser.add_argument("--skip-ratio", type=float, default=0.2)
     parser.add_argument("--entropy-field", default="normalized_avg_entropy_bits")
     parser.add_argument("--max-judge-candidates", type=int, default=None)
@@ -274,13 +333,41 @@ def main() -> None:
         raise ValueError("--full-graph-path requires exactly one task and one data id")
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    max_cases = None if data_ids is not None else args.max_cases
     all_summaries: List[Dict[str, Any]] = []
 
     for task in tasks:
         run_root = os.path.join(args.output_dir, f"{task.name}_judge_{timestamp}")
         os.makedirs(run_root, exist_ok=True)
-        cases = task.load_cases(data_ids, max_cases)
+        discovered_paths: Dict[int, str] = {}
+        if args.input_run_root:
+            discovered_paths = discover_full_graph_paths(args.input_run_root)
+            if not discovered_paths:
+                raise FileNotFoundError(
+                    f"Could not find any id*/full_graph.json under {args.input_run_root}"
+                )
+            cases = cases_from_discovered_full_graphs(
+                task,
+                discovered_paths,
+                data_ids,
+                args.max_cases,
+            )
+            if data_ids is not None:
+                missing_ids = sorted(set(data_ids) - set(discovered_paths))
+                if missing_ids:
+                    print(
+                        "Warning: missing full_graph.json for "
+                        f"{task.name} ids={','.join(str(case_id) for case_id in missing_ids)}"
+                    )
+        else:
+            max_cases = args.max_cases
+            if max_cases is None and data_ids is None:
+                max_cases = 1
+            cases = task.load_cases(data_ids, max_cases)
+
+        if not cases:
+            print(f"Warning: no cases to judge for {task.name}")
+            continue
+
         task_summaries: List[Dict[str, Any]] = []
         if args.parallel_workers == 1:
             for case in cases:
@@ -313,6 +400,8 @@ def main() -> None:
             "task": task.name,
             "num_cases": len(task_summaries),
             "num_failed": sum(1 for row in task_summaries if row.get("failed")),
+            "input_run_root": args.input_run_root,
+            "num_discovered_full_graphs": len(discovered_paths),
             "runs": task_summaries,
             "paths": {"run_root": run_root, "summary": task_summary_path},
         }
