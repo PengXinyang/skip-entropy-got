@@ -804,6 +804,21 @@ def main() -> None:
         "--output-dir",
         default=os.path.join(os.path.dirname(__file__), "batch_static_skip_results"),
     )
+    parser.add_argument(
+        "--direct-output-root",
+        action="store_true",
+        help="Use --output-dir directly as the task run root instead of creating task_skip_time subfolders.",
+    )
+    parser.add_argument(
+        "--run-log-name",
+        default="run.log",
+        help="Run log filename under the task run root. Default: run.log.",
+    )
+    parser.add_argument(
+        "--batch-summary-name",
+        default="batch_summary.json",
+        help="Batch summary filename under the task run root. Default: batch_summary.json.",
+    )
     args = parser.parse_args()
 
     if not 0.0 <= args.skip_ratio <= 1.0:
@@ -813,18 +828,23 @@ def main() -> None:
 
     task_specs = build_task_specs()
     tasks = selected_tasks(task_specs, args.tasks)
+    if args.direct_output_root and len(tasks) != 1:
+        raise ValueError("--direct-output-root requires exactly one task")
     data_ids = parse_ids(args.data_ids)
     max_cases = None if data_ids is not None else args.max_cases
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     for task in tasks:
-        run_root = os.path.join(
-            args.output_dir,
-            f"{task.name}_skip{args.skip_ratio}_{timestamp}",
-        )
+        if args.direct_output_root:
+            run_root = args.output_dir
+        else:
+            run_root = os.path.join(
+                args.output_dir,
+                f"{task.name}_skip{args.skip_ratio}_{timestamp}",
+            )
         os.makedirs(run_root, exist_ok=True)
         logging.basicConfig(
-            filename=os.path.join(run_root, "run.log"),
+            filename=os.path.join(run_root, args.run_log_name),
             filemode="w",
             level=logging.WARNING,
             force=True,
@@ -841,7 +861,7 @@ def main() -> None:
                     failed_case_summary(task, case, args, run_root, error)
                 )
 
-        batch_summary_path = os.path.join(run_root, "batch_summary.json")
+        batch_summary_path = os.path.join(run_root, args.batch_summary_name)
         batch_summary = aggregate_batch_summary(
             task_summaries,
             {"run_root": run_root, "batch_summary": batch_summary_path},

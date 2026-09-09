@@ -109,10 +109,8 @@ def copy_completed_cases(
     if not completed_cases:
         return copied_paths
 
-    copied_root = os.path.join(output_root, "resumed_completed")
-    os.makedirs(copied_root, exist_ok=True)
     for case_id, source_dir in sorted(completed_cases.items()):
-        target_dir = os.path.join(copied_root, f"id{case_id}")
+        target_dir = os.path.join(output_root, f"id{case_id}")
         shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
         copied_paths[case_id] = target_dir
     return copied_paths
@@ -199,7 +197,7 @@ def main() -> None:
         action="store_true",
         help=(
             "Copy completed id folders found under --resume-from into the new "
-            "run folder under resumed_completed/."
+            "run folder as direct id*/ folders."
         ),
     )
     parser.add_argument(
@@ -302,9 +300,10 @@ def main() -> None:
                 if len(processes) >= max_workers:
                     time.sleep(5)
 
-            shard_dir = os.path.join(task_output_root, f"shard{shard_index:02d}")
-            os.makedirs(shard_dir, exist_ok=True)
-            shard_log_path = os.path.join(shard_dir, "launcher.log")
+            shard_log_path = os.path.join(
+                task_output_root,
+                f"launcher_shard{shard_index:02d}.log",
+            )
             command = [
                 args.python,
                 batch_script,
@@ -323,7 +322,12 @@ def main() -> None:
                 "--entropy-field",
                 args.entropy_field,
                 "--output-dir",
-                shard_dir,
+                task_output_root,
+                "--direct-output-root",
+                "--run-log-name",
+                f"run_shard{shard_index:02d}.log",
+                "--batch-summary-name",
+                f"batch_summary_shard{shard_index:02d}.json",
             ]
             log_file = open(shard_log_path, "w", encoding="utf-8")
             print(
