@@ -37,7 +37,7 @@ class BaseTaskJudgePrompt:
             "- task_relevance: whether the node output is related to the overall task.\n"
             "- input_output_consistency: whether the node output follows from its inputs.\n"
             "- final_answer_contribution: whether the node output contributes information or reasoning used by the final answer.\n"
-            "- redundancy: whether this node duplicates information already available from its inputs or sibling nodes.\n"
+            "- redundancy: non-redundancy score; 1.0 means the node adds unique information, 0.0 means it is highly redundant with inputs or sibling nodes.\n"
             "- skip_risk: risk that skipping this node would hurt the final answer.\n"
             "- usefulness: overall usefulness for preserving final answer quality.\n"
             "- reason: one short explanation.\n\n"

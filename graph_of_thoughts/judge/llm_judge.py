@@ -266,7 +266,7 @@ def normalize_judge_scores(scores: Dict[str, Any]) -> Dict[str, Any]:
                 0.3 * normalized["task_relevance"]
                 + 0.3 * normalized["input_output_consistency"]
                 + 0.3 * normalized["final_answer_contribution"]
-                - 0.1 * normalized["redundancy"]
+                + 0.1 * normalized["redundancy"]
             )
         else:
             normalized["usefulness"] = None
@@ -386,7 +386,7 @@ def select_judge_skip_recommendations(
             skip_risk if isinstance(skip_risk, (int, float)) else 1.0,
             usefulness if isinstance(usefulness, (int, float)) else 1.0,
             contribution if isinstance(contribution, (int, float)) else 1.0,
-            -(redundancy if isinstance(redundancy, (int, float)) else 0.0),
+            redundancy if isinstance(redundancy, (int, float)) else 1.0,
         )
 
     skippable_rows.sort(key=sort_key)
