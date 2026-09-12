@@ -25,6 +25,7 @@ results/
 examples/*_results/
 *.out
 *.err
+output/
 
 # Environments
 env/
