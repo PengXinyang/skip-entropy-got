@@ -1,5 +1,7 @@
 #!/bin/bash
 set -euo pipefail
+source ~/.zshrc
+proxyon
 
 # ========== 1. 创建 venv ==========
 if [ ! -d "venv" ]; then
@@ -16,6 +18,7 @@ source venv/bin/activate
 echo "[$(date)] 安装 requirements.txt ..."
 pip install --upgrade pip
 pip install -r requirements.txt
+proxyoff
 
 # ========== 4. 运行第一个实验 ==========
 echo "[$(date)] 启动 parallel_batch_static_skip_experiment.py ..."
